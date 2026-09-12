@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #fbf6ee;
+  --paper-raised: #ffffff;
+  --ink: #211c16;
+  --ink-soft: #6b6255;
+  --line: #e7dcc9;
+  --accent: #e2572c;
+  --accent-soft: #f6ddce;
+  --gold: #b9862f;
+  --ok: #3f7a5c;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #18140f;
+    --paper-raised: #221c15;
+    --ink: #f3ece0;
+    --ink-soft: #b3a795;
+    --line: #362e23;
+    --accent: #ef7148;
+    --accent-soft: #3a271c;
+    --gold: #d9a655;
+    --ok: #5fae86;
+  }
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-raised: var(--paper-raised);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-gold: var(--gold);
+  --color-ok: var(--ok);
+  --font-display: var(--font-fraunces);
+  --font-sans: var(--font-inter);
+}
+
+* {
+  border-color: var(--line);
+}
+
+html {
+  background: var(--paper);
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-inter), system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.font-display {
+  font-family: var(--font-fraunces), Georgia, serif;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+/* Hide scrollbars on horizontally-scrolling rails without losing scroll */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+@keyframes toast-in {
+  from { transform: translateY(6px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.animate-toast-in {
+  animation: toast-in 160ms ease-out;
+}

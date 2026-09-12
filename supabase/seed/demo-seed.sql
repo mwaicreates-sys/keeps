@@ -87,17 +87,25 @@ begin
   delete from auth.users where email in ('gerry.demo@keepsapp.dev', 'cuz.demo@keepsapp.dev');
 
   -- 1. Demo auth accounts
+  -- NOTE: confirmation_token / recovery_token / email_change* / phone_change* /
+  -- reauthentication_token must be explicit empty strings, not NULL — GoTrue
+  -- scans these as non-nullable strings and a NULL here causes login to fail
+  -- with "Database error querying schema".
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password,
     email_confirmed_at, created_at, updated_at,
-    raw_app_meta_data, raw_user_meta_data, is_super_admin, is_sso_user, is_anonymous
+    raw_app_meta_data, raw_user_meta_data, is_super_admin, is_sso_user, is_anonymous,
+    confirmation_token, recovery_token, email_change_token_new, email_change,
+    email_change_token_current, phone_change, phone_change_token, reauthentication_token
   ) values
     ('00000000-0000-0000-0000-000000000000', v_gerry_id, 'authenticated', 'authenticated',
      'gerry.demo@keepsapp.dev', crypt(v_password, gen_salt('bf')),
-     now(), now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, false, false, false),
+     now(), now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, false, false, false,
+     '', '', '', '', '', '', '', ''),
     ('00000000-0000-0000-0000-000000000000', v_cuz_id, 'authenticated', 'authenticated',
      'cuz.demo@keepsapp.dev', crypt(v_password, gen_salt('bf')),
-     now(), now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, false, false, false);
+     now(), now(), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb, false, false, false,
+     '', '', '', '', '', '', '', '');
 
   insert into auth.identities (id, provider_id, user_id, identity_data, provider, created_at, updated_at, last_sign_in_at)
   values

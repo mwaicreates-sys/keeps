@@ -8,7 +8,7 @@ import { usePathname } from "next/navigation";
  * pages) — the shared mobile TopBar would duplicate it, so it's suppressed
  * on those routes only.
  */
-const HOME_HEADER_ROUTES = new Set(["/memories", "/drop"]);
+const HOME_HEADER_ROUTES = new Set(["/memories", "/drop", "/play"]);
 
 export function HideOnHome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

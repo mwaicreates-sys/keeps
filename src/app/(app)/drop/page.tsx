@@ -6,6 +6,7 @@ import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
 import { createDrop, type DropType } from "@/services/posts-client";
 import { createStory } from "@/services/stories-client";
+import { FilePicker } from "@/components/FilePicker";
 import { cn } from "@/lib/utils";
 import { Image as ImageIcon, Video, Music2, Type, Activity, Star } from "lucide-react";
 
@@ -110,13 +111,13 @@ export default function DropPage() {
             <label className="mb-1.5 block text-sm text-ink-soft">
               {type === "photo" ? "Photo" : "Video"}
             </label>
-            <input
-              type="file"
+            <FilePicker
               accept={type === "photo" ? "image/*" : "video/*"}
               multiple={type === "photo" && !isStory}
               required={!isStory || type === "photo" || type === "video"}
-              onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-              className="w-full rounded-xl border border-line bg-paper px-3.5 py-2.5 text-sm"
+              files={files}
+              onChange={setFiles}
+              label={type === "photo" ? "photo" : "video"}
             />
           </div>
         )}

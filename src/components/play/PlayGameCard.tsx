@@ -23,7 +23,7 @@ export function PlayGameCard({
   return (
     <Link
       href={href}
-      className="relative flex h-[224px] w-full min-w-0 flex-col justify-between overflow-hidden rounded-[26px] px-4 py-4 transition active:scale-[0.98]"
+      className="relative flex h-[224px] w-full min-w-0 flex-col overflow-hidden rounded-[26px] px-4 py-4 transition active:scale-[0.98]"
       style={{ backgroundColor: bg }}
     >
       <div className="flex items-start justify-between">
@@ -35,9 +35,16 @@ export function PlayGameCard({
         </span>
       </div>
 
-      <div className="absolute right-4 top-[68px] max-w-[46%] overflow-hidden">{preview}</div>
+      {/* This spacer — not absolute positioning against the whole card —
+          is what actually reserves the preview's space. A two-line title
+          (This or That, Match Predictions, Guess Mine) grows the title
+          block below and shrinks this spacer in response, so the preview
+          gets pushed/clipped instead of sitting on top of the text. */}
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        <div className="absolute right-0 top-0 max-w-[58%]">{preview}</div>
+      </div>
 
-      <div className="min-w-0 max-w-[72%]">
+      <div className="min-w-0 max-w-[72%] shrink-0">
         <p className="text-[20px] font-extrabold leading-tight text-[#2c281f]">{title}</p>
         <p className="mt-1 text-[14.5px] leading-[1.35] text-[#5c574c]">{subtitle}</p>
       </div>

@@ -7,7 +7,7 @@ import { Sparkles, Search, Bell } from "lucide-react";
  */
 export function HomeHeader({ unreadCount }: { unreadCount: number }) {
   return (
-    <div className="relative flex items-center justify-center px-4 pb-3 pt-2">
+    <div className="relative flex items-center justify-center px-4 pb-2 pt-3">
       <Link href="/search" aria-label="Search" className="absolute left-4 rounded-full p-1.5 text-[#9a958c]">
         <Search size={18} strokeWidth={1.8} />
       </Link>

@@ -6,6 +6,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { DesktopSidebar } from "@/components/DesktopSidebar";
 import { TopBar } from "@/components/TopBar";
 import { HideOnHome } from "@/components/HideOnHome";
+import { MainSurface } from "@/components/MainSurface";
 import { SessionProvider } from "@/components/SessionProvider";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -28,7 +29,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <Bell size={19} strokeWidth={1.8} />
             </Link>
           </div>
-          <main className="flex-1 pb-24 md:pb-10">{children}</main>
+          <MainSurface>{children}</MainSurface>
         </div>
       </div>
       <BottomNav />

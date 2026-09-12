@@ -9,15 +9,9 @@ import { HomeHeader } from "@/components/home/HomeHeader";
 import { FeedPost } from "@/components/home/FeedPost";
 import { EmptyHome } from "@/components/home/EmptyHome";
 
-// Home is always this light, "alive" social surface regardless of system
-// theme — Memories/Play/Profile keep their own visual language.
-const HOME_LIGHT_THEME = {
-  "--paper": "#faf9f6",
-  "--paper-raised": "#ffffff",
-  "--ink": "#3a362f",
-  "--ink-soft": "#a39d92",
-  "--line": "#eee9e2",
-} as React.CSSProperties;
+// Home's light theme is applied one level up, on <main> itself (see
+// MainSurface), so the whole scrollable surface shares it — not just this
+// inner wrapper.
 
 export default async function HomePage() {
   const ctx = await getSessionContext();
@@ -36,7 +30,7 @@ export default async function HomePage() {
   ]);
 
   return (
-    <div className="mx-auto max-w-xl bg-paper pb-4 md:max-w-2xl md:rounded-3xl md:py-4" style={HOME_LIGHT_THEME}>
+    <div className="mx-auto max-w-xl pb-4 md:max-w-2xl md:py-4">
       <HomeHeader unreadCount={unreadCount ?? 0} />
       <StoryRail stories={stories} currentUserId={ctx.userId} />
 

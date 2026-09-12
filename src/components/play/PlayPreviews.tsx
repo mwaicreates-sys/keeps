@@ -52,19 +52,27 @@ export function BlindRankPreview() {
   );
 }
 
-/** A football plus a real Home/Draw/Away selector — never just a trophy icon. */
+/**
+ * A football plus a real Home/Draw/Away selector — never just a trophy
+ * icon. A genuine 3-column CSS grid (not three flex pills eyeballed to
+ * fit), bounded by max-width so it can never push the card wider than
+ * its own grid cell.
+ */
 export function MatchPredictionPreview({ homeTeam }: { homeTeam?: string }) {
   return (
-    <div className="flex flex-col items-end gap-1.5">
-      <span className="grid h-11 w-11 place-items-center rounded-full bg-white text-xl shadow-md" aria-hidden>
+    <div className="flex w-full min-w-0 items-center justify-end gap-2">
+      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white text-xl shadow-md" aria-hidden>
         ⚽
       </span>
-      <div className="flex gap-1 rounded-full bg-white p-1 shadow-md">
-        <span className="rounded-full bg-[#2f8f52] px-2 py-1 text-[10px] font-semibold text-white">
-          {homeTeam ? homeTeam.slice(0, 4) : "Home"}
+      <div
+        className="grid min-w-0 flex-1 gap-1 rounded-2xl bg-white p-1 shadow-md"
+        style={{ gridTemplateColumns: "repeat(3, minmax(0, 1fr))", maxWidth: 150 }}
+      >
+        <span className="truncate rounded-xl bg-[#2f8f52] px-1 py-1.5 text-center text-[10px] font-semibold text-white">
+          {homeTeam ? homeTeam.slice(0, 5) : "Home"}
         </span>
-        <span className="rounded-full px-2 py-1 text-[10px] font-medium text-[#5c574c]">Draw</span>
-        <span className="rounded-full px-2 py-1 text-[10px] font-medium text-[#5c574c]">Away</span>
+        <span className="truncate rounded-xl px-1 py-1.5 text-center text-[10px] font-medium text-[#5c574c]">Draw</span>
+        <span className="truncate rounded-xl px-1 py-1.5 text-center text-[10px] font-medium text-[#5c574c]">Away</span>
       </div>
     </div>
   );

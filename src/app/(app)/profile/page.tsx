@@ -5,6 +5,7 @@ import { getPostsByAuthor } from "@/services/posts-server";
 import { Avatar } from "@/components/Avatar";
 import { MemoryCard } from "@/components/MemoryCard";
 import { EmptyState } from "@/components/EmptyState";
+import { AccountSwitcher } from "@/components/profile/AccountSwitcher";
 import { timeAgo } from "@/lib/utils";
 import { Grid3x3, ListOrdered, Star, Bookmark, Users, Headphones, ChevronRight, Sparkles } from "lucide-react";
 
@@ -179,6 +180,8 @@ export default async function ProfilePage({
           <Users size={14} /> Us page
         </Link>
       </div>
+
+      <AccountSwitcher />
 
       <div className="mb-4 flex gap-1 overflow-x-auto border-b border-line">
         {TABS.map(({ key, label, icon: Icon }) => (

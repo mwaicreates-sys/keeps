@@ -398,8 +398,11 @@ create policy profiles_select on profiles for select
 create policy profiles_insert on profiles for insert with check (id = auth.uid());
 create policy profiles_update on profiles for update using (id = auth.uid());
 
--- spaces: members only
-create policy spaces_select on spaces for select using (is_space_member(id));
+-- spaces: members only, plus the creator can read their own space back
+-- immediately after INSERT ... RETURNING — is_space_member(id) alone would
+-- fail there since the space_members row doesn't exist yet at that instant.
+create policy spaces_select on spaces for select
+  using (is_space_member(id) or created_by = auth.uid());
 create policy spaces_insert on spaces for insert with check (created_by = auth.uid());
 create policy spaces_update on spaces for update using (is_space_member(id));
 

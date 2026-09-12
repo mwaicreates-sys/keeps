@@ -34,8 +34,13 @@ async function hydratePosts(
     ...(r as unknown as Tables<"posts">),
     author: r.author as Tables<"profiles">,
     media: (r.media as Tables<"post_media">[]) ?? [],
-    song: (r.song as Tables<"post_song_metadata">[])?.[0] ?? null,
-    favorite: (r.favorite as Tables<"post_favorite_metadata">[])?.[0] ?? null,
+    // post_song_metadata.post_id and post_favorite_metadata.post_id are each
+    // the table's primary key, so PostgREST treats these as to-one
+    // relationships and embeds a single object (or null) — never an array.
+    // (Previously read as `song[0]`/`favorite[0]`, which is always undefined
+    // for an object, silently dropping every song/favorite Drop's data.)
+    song: (r.song as Tables<"post_song_metadata"> | null) ?? null,
+    favorite: (r.favorite as Tables<"post_favorite_metadata"> | null) ?? null,
     reactions: (r.reactions as Tables<"reactions">[]) ?? [],
     commentCount: commentCounts.get(r.id as string) ?? 0,
     isSaved: savedSet.has(r.id as string),

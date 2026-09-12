@@ -8,7 +8,7 @@ import { PostActions } from "@/components/home/PostActions";
 import { Avatar } from "@/components/Avatar";
 import { addComment } from "@/services/posts-client";
 import { useSession } from "@/components/SessionProvider";
-import { Music2 } from "lucide-react";
+import { Music2, Play } from "lucide-react";
 import type { FeedPost as FeedPostData } from "@/lib/domain-types";
 import type { Tables } from "@/lib/types";
 
@@ -66,20 +66,31 @@ export function FeedPost({ post }: { post: FeedPostData }) {
           href={post.song.url ?? "#"}
           target="_blank"
           rel="noreferrer"
-          className="mt-2.5 flex items-center gap-3 rounded-2xl bg-[#f7f5f1] px-3 py-2.5"
+          className="mt-2.5 flex items-start gap-3 rounded-2xl bg-[#f7f5f1] p-3.5"
         >
           {post.song.artwork_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={post.song.artwork_url} alt="" className="h-11 w-11 rounded-xl object-cover" />
+            <img src={post.song.artwork_url} alt="" className="h-20 w-20 shrink-0 rounded-xl object-cover" />
           ) : (
-            <div className="grid h-11 w-11 place-items-center rounded-xl bg-[#e9e4da]">
-              <Music2 size={18} className="text-[#7c766c]" />
+            <div className="grid h-20 w-20 shrink-0 place-items-center rounded-xl bg-[#e9e4da]">
+              <Music2 size={24} className="text-[#7c766c]" />
             </div>
           )}
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-[#3a362f]">{post.song.title}</p>
-            <p className="truncate text-xs text-[#a39d92]">{post.song.artist}</p>
+          <div className="min-w-0 flex-1 py-0.5">
+            <p className="truncate text-[16px] font-semibold leading-tight text-[#3a362f]">{post.song.title}</p>
+            {post.song.artist && (
+              <p className="truncate text-[13.5px] leading-snug text-[#7c766c]">{post.song.artist}</p>
+            )}
+            {post.song.album && (
+              <p className="truncate text-[12.5px] leading-snug text-[#a39d92]">{post.song.album}</p>
+            )}
+            {post.song.note && (
+              <p className="mt-1 line-clamp-2 text-[13px] italic leading-snug text-[#7c766c]">&ldquo;{post.song.note}&rdquo;</p>
+            )}
           </div>
+          <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white text-[#3a362f] shadow-sm">
+            <Play size={13} fill="currentColor" strokeWidth={0} />
+          </span>
         </a>
       )}
 

@@ -23,7 +23,7 @@ export function PlayGameCard({
   return (
     <Link
       href={href}
-      className="relative flex h-[224px] flex-col justify-between overflow-hidden rounded-[26px] px-4 py-4 transition active:scale-[0.98]"
+      className="relative flex h-[224px] w-full min-w-0 flex-col justify-between overflow-hidden rounded-[26px] px-4 py-4 transition active:scale-[0.98]"
       style={{ backgroundColor: bg }}
     >
       <div className="flex items-start justify-between">
@@ -35,11 +35,11 @@ export function PlayGameCard({
         </span>
       </div>
 
-      <div className="absolute right-4 top-[68px]">{preview}</div>
+      <div className="absolute right-4 top-[68px] max-w-[46%] overflow-hidden">{preview}</div>
 
-      <div>
+      <div className="min-w-0 max-w-[72%]">
         <p className="text-[20px] font-extrabold leading-tight text-[#2c281f]">{title}</p>
-        <p className="mt-1 max-w-[72%] text-[14.5px] leading-[1.35] text-[#5c574c]">{subtitle}</p>
+        <p className="mt-1 text-[14.5px] leading-[1.35] text-[#5c574c]">{subtitle}</p>
       </div>
     </Link>
   );

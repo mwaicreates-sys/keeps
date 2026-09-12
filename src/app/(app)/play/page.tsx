@@ -29,7 +29,7 @@ export default async function PlayHubPage() {
   ]);
 
   return (
-    <div className="mx-auto max-w-xl pb-4 md:max-w-2xl md:py-4">
+    <div className="mx-auto w-full min-h-dvh max-w-xl pb-4 md:max-w-2xl md:py-4">
       <HomeHeader unreadCount={unreadCount ?? 0} />
 
       <div className="px-4 pb-4 pt-1">
@@ -39,7 +39,7 @@ export default async function PlayHubPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 px-4">
+      <div className="grid w-full grid-cols-2 gap-3 px-4" style={{ gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
         <PlayGameCard
           href="/play/this-or-that"
           bg="#fbe9ec"

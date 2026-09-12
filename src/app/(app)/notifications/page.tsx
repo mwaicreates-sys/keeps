@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getSessionContext } from "@/services/session";
 import { createClient } from "@/lib/supabase/server";
+import { HomeHeader } from "@/components/home/HomeHeader";
 import { NotificationsList } from "@/components/NotificationsList";
 
 const FILTERS = [
@@ -27,25 +28,37 @@ export default async function NotificationsPage({
     .order("created_at", { ascending: false })
     .limit(100);
   if (filter !== "all") query = query.eq("category", filter);
-  const { data: notifications } = await query;
+  const [{ data: notifications }, { count: unreadCount }] = await Promise.all([
+    query,
+    supabase.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", ctx.userId).is("read_at", null),
+  ]);
 
   return (
-    <div className="mx-auto max-w-lg px-4 py-6">
-      <h1 className="mb-4 font-display text-2xl">Notifications</h1>
-      <div className="mb-4 flex gap-1 overflow-x-auto">
+    <div className="mx-auto max-w-xl pb-4 md:max-w-2xl md:py-4">
+      <HomeHeader unreadCount={unreadCount ?? 0} />
+
+      <div className="px-4 pb-4 pt-1">
+        <h1 className="text-[27px] font-bold tracking-tight text-[#3a362f]">Notifications</h1>
+        <p className="mt-0.5 text-[15px] text-[#a39d92]">Everything you might have missed.</p>
+      </div>
+
+      <div className="no-scrollbar mb-4 flex gap-2 overflow-x-auto px-4 pb-1">
         {FILTERS.map((f) => (
           <Link
             key={f.key}
             href={`/notifications?filter=${f.key}`}
-            className={`rounded-full border px-3.5 py-1.5 text-sm ${
-              filter === f.key ? "border-ink bg-ink text-paper" : "border-line text-ink-soft"
+            className={`shrink-0 rounded-full px-4 py-2 text-[14px] font-medium ${
+              filter === f.key ? "bg-[#3a362f] text-white" : "bg-white text-[#7c766c]"
             }`}
           >
             {f.label}
           </Link>
         ))}
       </div>
-      <NotificationsList notifications={notifications ?? []} userId={ctx.userId} />
+
+      <div className="px-4">
+        <NotificationsList notifications={notifications ?? []} userId={ctx.userId} />
+      </div>
     </div>
   );
 }

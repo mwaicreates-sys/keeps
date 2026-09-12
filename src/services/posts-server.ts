@@ -139,6 +139,27 @@ export async function getPostsByAuthor(spaceId: string, authorId: string, viewer
   return hydratePosts(data ?? [], viewerId);
 }
 
+/**
+ * A handful of recently-uploaded photos from this space's own posts, for
+ * the Drop page's "Recent photos" rail. This is real, already-uploaded
+ * Keeps media — a webapp can't read the device's photo gallery, so this
+ * intentionally isn't a gallery browser, just a shortcut back into ones
+ * you've already shared. New photos still come from the browser's own
+ * file picker.
+ */
+export async function getRecentMedia(spaceId: string, userId: string, limit = 8) {
+  const posts = await getFeed(spaceId, userId, 30);
+  const media: { id: string; url: string }[] = [];
+  for (const post of posts) {
+    for (const m of post.media) {
+      if (m.media_type !== "photo") continue;
+      media.push({ id: m.id, url: m.url });
+      if (media.length >= limit) return media;
+    }
+  }
+  return media;
+}
+
 export async function getComments(postId: string) {
   const supabase = await createClient();
   const { data, error } = await supabase

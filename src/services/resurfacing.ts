@@ -1,7 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
 import type { Tables } from "@/lib/types";
 
-export type Resurfaced = { label: string; post: Tables<"posts"> & { author: Tables<"profiles"> } };
+export type Resurfaced = {
+  label: string;
+  post: Tables<"posts"> & { author: Tables<"profiles">; media: Pick<Tables<"post_media">, "url">[] };
+};
 
 /**
  * Only ever resurfaces real, previously-stored posts — never fabricated
@@ -12,12 +15,12 @@ export async function getResurfaced(spaceId: string): Promise<Resurfaced[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("posts")
-    .select("*, author:profiles!posts_author_id_fkey(*)")
+    .select("*, author:profiles!posts_author_id_fkey(*), media:post_media(url)")
     .eq("space_id", spaceId)
     .eq("saved_to_memories", true)
     .order("occurred_at", { ascending: true });
 
-  const posts = (data ?? []) as (Tables<"posts"> & { author: Tables<"profiles"> })[];
+  const posts = (data ?? []) as (Tables<"posts"> & { author: Tables<"profiles">; media: { url: string }[] })[];
   if (posts.length === 0) return [];
 
   const now = new Date();

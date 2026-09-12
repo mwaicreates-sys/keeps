@@ -62,6 +62,7 @@ export async function getFeed(spaceId: string, userId: string, limit = 20): Prom
 export type MemoryFilters = {
   year?: number;
   category?: string;
+  type?: string;
   authorId?: string;
   tag?: string;
   q?: string;
@@ -81,6 +82,10 @@ export async function getMemories(
     .order("occurred_at", { ascending: false });
 
   if (filters.category) query = query.eq("category", filters.category);
+  // "Activities" in the UI covers both activity and place Drops — they're
+  // presented as one category there, so the filter follows suit.
+  if (filters.type === "activity") query = query.in("type", ["activity", "place"]);
+  else if (filters.type) query = query.eq("type", filters.type);
   if (filters.authorId) query = query.eq("author_id", filters.authorId);
   if (filters.q) query = query.ilike("caption", `%${filters.q}%`);
   if (filters.year) {

@@ -15,10 +15,10 @@ const HOME_LIGHT_THEME = {
 
 export function MainSurface({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const isHome = pathname.startsWith("/home");
+  const usesHomeTheme = pathname.startsWith("/home") || pathname === "/memories";
 
   return (
-    <main className="min-h-full flex-1 bg-paper pb-24 md:pb-10" style={isHome ? HOME_LIGHT_THEME : undefined}>
+    <main className="min-h-full flex-1 bg-paper pb-24 md:pb-10" style={usesHomeTheme ? HOME_LIGHT_THEME : undefined}>
       {children}
     </main>
   );

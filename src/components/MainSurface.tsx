@@ -18,6 +18,7 @@ export function MainSurface({ children }: { children: React.ReactNode }) {
   const usesHomeTheme =
     pathname.startsWith("/home") ||
     pathname === "/memories" ||
+    pathname.startsWith("/memories/") ||
     pathname === "/drop" ||
     pathname === "/play" ||
     pathname === "/profile" ||

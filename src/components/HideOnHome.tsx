@@ -12,6 +12,6 @@ const HOME_HEADER_ROUTES = new Set(["/memories", "/drop", "/play", "/profile", "
 
 export function HideOnHome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  if (pathname.startsWith("/home") || HOME_HEADER_ROUTES.has(pathname)) return null;
+  if (pathname.startsWith("/home") || pathname.startsWith("/memories/") || HOME_HEADER_ROUTES.has(pathname)) return null;
   return <>{children}</>;
 }

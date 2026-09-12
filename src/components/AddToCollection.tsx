@@ -38,21 +38,27 @@ export function AddToCollection({
       <select
         value={selected}
         onChange={(e) => setSelected(e.target.value)}
-        className="rounded-full border border-line bg-paper px-3 py-1.5 text-xs"
+        className="rounded-full bg-white px-3.5 py-2 text-[13px] text-[#3a362f] outline-none"
       >
         <option value="">Add to…</option>
         {collections.map((c) => (
-          <option key={c.id} value={c.id}>{c.name}</option>
+          <option key={c.id} value={c.id}>
+            {c.name}
+          </option>
         ))}
       </select>
-      <button onClick={add} className="rounded-full bg-ink px-3 py-1.5 text-xs text-paper">Add</button>
+      <button onClick={add} className="rounded-full bg-[#3a362f] px-3.5 py-2 text-[13px] font-medium text-white">
+        Add
+      </button>
       <input
         value={newName}
         onChange={(e) => setNewName(e.target.value)}
-        placeholder="New collection"
-        className="rounded-full border border-line bg-paper px-3 py-1.5 text-xs"
+        placeholder="New album"
+        className="rounded-full bg-white px-3.5 py-2 text-[13px] text-[#3a362f] outline-none placeholder:text-[#a39d92]"
       />
-      <button onClick={createAndAdd} className="rounded-full border border-line px-3 py-1.5 text-xs">Create</button>
+      <button onClick={createAndAdd} className="rounded-full bg-[#f2efe9] px-3.5 py-2 text-[13px] font-medium text-[#3a362f]">
+        Create
+      </button>
     </div>
   );
 }

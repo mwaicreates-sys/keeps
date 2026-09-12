@@ -39,21 +39,23 @@ export function DropTypeCard({
     <button
       type="button"
       onClick={onSelect}
-      className="relative flex h-[164px] flex-col justify-between overflow-hidden rounded-[26px] p-4 text-left transition active:scale-[0.98]"
+      className="relative flex h-[164px] flex-col justify-between overflow-hidden rounded-[26px] px-5 py-4 text-left transition active:scale-[0.98]"
       style={{ backgroundColor: bg }}
     >
       <div className="flex items-start justify-between">
-        <span className="grid h-10 w-10 place-items-center rounded-2xl" style={{ backgroundColor: iconBg, color: iconColor }}>
-          <Icon size={20} strokeWidth={2} />
+        <span className="grid h-[52px] w-[52px] place-items-center rounded-2xl" style={{ backgroundColor: iconBg, color: iconColor }}>
+          <Icon size={32} strokeWidth={2} />
         </span>
-        <ChevronRight size={21} className="text-[#00000055]" />
+        <span className="-m-2.5 grid h-11 w-11 place-items-center">
+          <ChevronRight size={23} className="text-[#00000060]" />
+        </span>
       </div>
 
-      {preview && <div className="absolute bottom-3 right-3">{preview}</div>}
+      {preview && <div className="absolute bottom-4 right-4">{preview}</div>}
 
-      <div className="max-w-[70%]">
-        <p className="text-[18px] font-bold leading-tight text-[#2c281f]">{label}</p>
-        <p className="mt-0.5 text-[13.5px] text-[#5c574c]">{subtitle}</p>
+      <div className="max-w-[68%]">
+        <p className="text-[19px] font-bold leading-tight text-[#2c281f]">{label}</p>
+        <p className="mt-1 text-[15px] leading-[1.35] text-[#5c574c]">{subtitle}</p>
       </div>
     </button>
   );

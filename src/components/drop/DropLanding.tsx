@@ -74,17 +74,17 @@ function TypePreview({
 }) {
   if (type === "photo") {
     const shots = recentMedia.slice(0, 2);
-    if (shots.length === 0) return <ImageIcon size={26} className="text-[#00000030]" />;
+    if (shots.length === 0) return <ImageIcon size={30} className="text-[#00000030]" />;
     return (
-      <div className="relative h-14 w-16">
+      <div className="relative h-[76px] w-[84px]">
         {shots.map((m, i) => (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             key={m.id}
             src={m.url}
             alt=""
-            className="absolute h-11 w-11 rounded-xl border-2 border-white object-cover shadow-sm"
-            style={{ right: i * 14, bottom: i * 6, zIndex: shots.length - i }}
+            className="absolute h-16 w-16 rounded-xl border-2 border-white object-cover shadow-sm"
+            style={{ right: i * 16, bottom: i * 8, zIndex: shots.length - i }}
           />
         ))}
       </div>
@@ -93,24 +93,24 @@ function TypePreview({
 
   if (type === "video") {
     return (
-      <div className="grid h-14 w-16 place-items-center rounded-xl bg-[#00000010]">
-        <ImageIcon size={22} className="text-[#00000040]" />
+      <div className="grid h-[70px] w-[78px] place-items-center rounded-xl bg-[#00000010]">
+        <ImageIcon size={26} className="text-[#00000040]" />
       </div>
     );
   }
 
   if (type === "song") {
     return (
-      <div className="grid h-14 w-14 place-items-center rounded-xl bg-[#00000012]">
-        <Music2 size={22} className="text-[#00000045]" />
+      <div className="grid h-[70px] w-[70px] place-items-center rounded-xl bg-[#00000012]">
+        <Music2 size={26} className="text-[#00000045]" />
       </div>
     );
   }
 
   if (type === "text") {
-    if (!recentCaption) return <TypeIcon size={24} className="text-[#00000030]" />;
+    if (!recentCaption) return <TypeIcon size={28} className="text-[#00000030]" />;
     return (
-      <div className="max-w-[130px] rounded-xl bg-white/70 px-2.5 py-2 text-[11px] leading-snug text-[#5c574c] shadow-sm">
+      <div className="max-w-[140px] rounded-xl bg-white/70 px-3 py-2.5 text-[12.5px] leading-snug text-[#5c574c] shadow-sm">
         {`"${recentCaption.slice(0, 40)}${recentCaption.length > 40 ? "…" : ""}"`}
       </div>
     );
@@ -118,12 +118,16 @@ function TypePreview({
 
   if (type === "activity") {
     return (
-      <div className="flex items-center gap-1 rounded-full bg-white/80 px-2.5 py-1.5 shadow-sm">
-        <MapPin size={12} className="text-[#2f6fa3]" />
-        {recentPlace && <span className="text-[11px] font-medium text-[#3a362f]">{recentPlace}</span>}
+      <div className="flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-2 shadow-sm">
+        <MapPin size={14} className="text-[#2f6fa3]" />
+        {recentPlace && <span className="text-[12.5px] font-medium text-[#3a362f]">{recentPlace}</span>}
       </div>
     );
   }
 
-  return <Star size={24} className="fill-[#00000018] text-[#00000030]" />;
+  return (
+    <div className="grid h-[68px] w-[68px] place-items-center rounded-xl bg-[#00000012]">
+      <Star size={28} className="fill-[#00000022] text-[#00000038]" />
+    </div>
+  );
 }

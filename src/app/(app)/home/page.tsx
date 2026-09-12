@@ -35,15 +35,15 @@ export default async function HomePage() {
       <StoryRail stories={stories} currentUserId={ctx.userId} />
 
       {resurfaced.length > 0 && (
-        <div className="no-scrollbar mb-1 flex gap-2.5 overflow-x-auto px-4 pb-3">
+        <div className="no-scrollbar mb-1 flex gap-3 overflow-x-auto px-4 pb-3">
           {resurfaced.map((r) => (
             <Link
               key={r.post.id}
               href={`/memories/${r.post.id}`}
-              className="flex w-48 shrink-0 flex-col gap-1 rounded-2xl bg-white p-3 shadow-[0_2px_12px_-6px_rgba(20,18,15,0.12)]"
+              className="flex min-h-[82px] w-40 shrink-0 flex-col justify-center gap-1 rounded-2xl bg-white p-3.5 shadow-[0_2px_12px_-6px_rgba(20,18,15,0.12)]"
             >
               <p className="text-[11px] font-semibold uppercase tracking-wide text-[#d4a72c]">{r.label}</p>
-              <p className="truncate text-sm text-[#7c766c]">{r.post.caption || `A ${r.post.type} you kept`}</p>
+              <p className="truncate text-[15px] text-[#7c766c]">{r.post.caption || `A ${r.post.type} you kept`}</p>
             </Link>
           ))}
         </div>

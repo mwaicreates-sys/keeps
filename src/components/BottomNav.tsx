@@ -25,32 +25,32 @@ export function BottomNav() {
       className="fixed inset-x-0 bottom-0 z-40 border-t border-[#f0ede6] bg-white/95 backdrop-blur md:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <ul className="flex items-stretch justify-between px-3">
+      <ul className="flex h-[72px] items-center justify-between px-3">
         {items.map(({ href, label, icon: Icon, primary }) => {
           const active = pathname.startsWith(href);
           return (
-            <li key={href} className="flex-1">
+            <li key={href} className="flex flex-1 items-center justify-center">
               <Link
                 href={href}
                 aria-label={label}
                 aria-current={active ? "page" : undefined}
-                className="flex flex-col items-center justify-center gap-1 py-2.5"
+                className="grid h-11 w-11 place-items-center"
               >
                 {primary ? (
-                  <span className="grid h-9 w-9 place-items-center rounded-full bg-[#3a362f] text-white">
-                    <Icon size={20} strokeWidth={2.2} />
+                  <span className="grid h-14 w-14 place-items-center rounded-full bg-[#3a362f] text-white">
+                    <Icon size={24} strokeWidth={2.2} />
                   </span>
                 ) : (
-                  <Icon size={22} strokeWidth={active ? 2.2 : 1.6} className={active ? "text-[#3a362f]" : "text-[#b8b2a6]"} />
+                  <Icon size={24} strokeWidth={active ? 2.2 : 1.6} className={active ? "text-[#3a362f]" : "text-[#b8b2a6]"} />
                 )}
               </Link>
             </li>
           );
         })}
-        <li className="flex-1">
-          <Link href="/profile" aria-current={profileActive ? "page" : undefined} className="flex flex-col items-center justify-center gap-1 py-2.5">
+        <li className="flex flex-1 items-center justify-center">
+          <Link href="/profile" aria-current={profileActive ? "page" : undefined} className="grid h-11 w-11 place-items-center">
             <span className={cn("rounded-full p-0.5", profileActive && "ring-2 ring-[#3a362f]")}>
-              <Avatar name={profile.display_name} url={profile.avatar_url} size={24} />
+              <Avatar name={profile.display_name} url={profile.avatar_url} size={38} />
             </span>
           </Link>
         </li>

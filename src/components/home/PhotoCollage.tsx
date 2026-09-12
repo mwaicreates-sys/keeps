@@ -6,22 +6,25 @@ type Media = { id: string; url: string; media_type: string };
  * overlapping lower-center — with a soft "+N" bubble for the rest.
  * Falls back gracefully for 1 or 2 photos.
  *
- * The stage is a fixed `aspect-square` box (not sized off any source
- * image), so a post's height never depends on what the photos inside it
- * happen to be shaped like — at typical mobile card widths (~300–380px)
- * that keeps the whole collage well within one screen instead of
- * stretching toward it.
+ * Every case sizes its stage with a fixed `aspect-ratio` (never the
+ * source media's own dimensions), so a post's height can't run away
+ * based on what's inside it — a single portrait photo and a 6-photo
+ * collage land in roughly the same footprint at a given card width.
  */
 export function PhotoCollage({ media }: { media: Media[] }) {
   if (media.length === 1) {
+    const item = media[0];
+    if (item.media_type === "video") {
+      return (
+        <div className="w-full overflow-hidden rounded-[22px] bg-black" style={{ aspectRatio: "16 / 9" }}>
+          <video src={item.url} controls className="h-full w-full object-cover" />
+        </div>
+      );
+    }
     return (
-      <div className="w-full overflow-hidden rounded-[22px] bg-black" style={{ aspectRatio: "4 / 3", maxHeight: 420 }}>
-        {media[0].media_type === "video" ? (
-          <video src={media[0].url} controls className="h-full w-full object-cover" />
-        ) : (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={media[0].url} alt="" loading="lazy" className="h-full w-full object-cover" />
-        )}
+      <div className="w-full overflow-hidden rounded-[22px]" style={{ aspectRatio: "10 / 11" }}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={item.url} alt="" loading="lazy" className="h-full w-full object-cover" />
       </div>
     );
   }
@@ -29,7 +32,7 @@ export function PhotoCollage({ media }: { media: Media[] }) {
   const extra = media.length - 3;
 
   return (
-    <div className="relative aspect-square w-full">
+    <div className="relative w-full" style={{ aspectRatio: "1 / 1.15" }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={media[0].url}

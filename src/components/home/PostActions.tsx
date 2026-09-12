@@ -53,20 +53,20 @@ export function PostActions({
             onClick={() => react("❤️")}
             aria-pressed={liked}
             aria-label="Like"
-            className="grid h-9 w-9 place-items-center rounded-full transition active:scale-90"
+            className="grid h-11 w-11 place-items-center rounded-full transition active:scale-90"
           >
-            <Heart size={22} strokeWidth={1.8} className={liked ? "text-[#ec4899]" : "text-[#3a362f]"} fill={liked ? "#ec4899" : "none"} />
+            <Heart size={24} strokeWidth={1.8} className={liked ? "text-[#ec4899]" : "text-[#3a362f]"} fill={liked ? "#ec4899" : "none"} />
           </button>
-          <button onClick={onToggleComments} aria-label="Replies" className="grid h-9 w-9 place-items-center rounded-full">
-            <MessageCircle size={20} strokeWidth={1.8} className="text-[#3a362f]" />
+          <button onClick={onToggleComments} aria-label="Replies" className="grid h-11 w-11 place-items-center rounded-full">
+            <MessageCircle size={23} strokeWidth={1.8} className="text-[#3a362f]" />
           </button>
           <button
             onClick={() => setShowMore((s) => !s)}
             aria-label="More reactions"
             aria-expanded={showMore}
-            className="grid h-9 w-9 place-items-center rounded-full"
+            className="grid h-11 w-11 place-items-center rounded-full"
           >
-            <SmilePlus size={20} strokeWidth={1.8} className="text-[#3a362f]" />
+            <SmilePlus size={23} strokeWidth={1.8} className="text-[#3a362f]" />
           </button>
         </div>
 
@@ -91,9 +91,9 @@ export function PostActions({
             }}
             aria-pressed={localSaved}
             aria-label="Save"
-            className="grid h-8 w-8 place-items-center rounded-full"
+            className="grid h-10 w-10 place-items-center rounded-full"
           >
-            <Bookmark size={16} strokeWidth={1.8} className={cn("text-[#a39d92]", localSaved && "text-[#3a362f]")} fill={localSaved ? "#3a362f" : "none"} />
+            <Bookmark size={19} strokeWidth={1.8} className={cn("text-[#a39d92]", localSaved && "text-[#3a362f]")} fill={localSaved ? "#3a362f" : "none"} />
           </button>
           <button
             onClick={() => {
@@ -102,9 +102,9 @@ export function PostActions({
             }}
             aria-pressed={localMemory}
             aria-label="Keep as memory"
-            className="grid h-8 w-8 place-items-center rounded-full"
+            className="grid h-10 w-10 place-items-center rounded-full"
           >
-            <Sparkles size={16} strokeWidth={1.8} className={cn("text-[#a39d92]", localMemory && "text-[#d4a72c]")} fill={localMemory ? "#d4a72c" : "none"} />
+            <Sparkles size={19} strokeWidth={1.8} className={cn("text-[#a39d92]", localMemory && "text-[#d4a72c]")} fill={localMemory ? "#d4a72c" : "none"} />
           </button>
         </div>
       </div>

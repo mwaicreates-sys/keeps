@@ -45,8 +45,14 @@ export function FeedPost({ post }: { post: FeedPostData }) {
     await addComment(post.id, userId, body, space.id, otherMember?.id ?? null, post.author_id).catch(() => {});
   }
 
+  const isTextOnly = post.type === "text" && post.media.length === 0 && !post.song && !post.favorite;
+
   return (
-    <article className="mx-4 mb-4 rounded-[26px] bg-white p-3 shadow-[0_2px_16px_-6px_rgba(20,18,15,0.12)]">
+    <article
+      className={`mx-4 mb-4 rounded-[26px] bg-white px-4 shadow-[0_2px_16px_-6px_rgba(20,18,15,0.12)] ${
+        isTextOnly ? "py-5" : "py-4"
+      }`}
+    >
       <PostHeader
         author={post.author}
         type={post.type}
@@ -70,26 +76,26 @@ export function FeedPost({ post }: { post: FeedPostData }) {
         >
           {post.song.artwork_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={post.song.artwork_url} alt="" className="h-20 w-20 shrink-0 rounded-xl object-cover" />
+            <img src={post.song.artwork_url} alt="" className="h-[88px] w-[88px] shrink-0 rounded-xl object-cover" />
           ) : (
-            <div className="grid h-20 w-20 shrink-0 place-items-center rounded-xl bg-[#e9e4da]">
-              <Music2 size={24} className="text-[#7c766c]" />
+            <div className="grid h-[88px] w-[88px] shrink-0 place-items-center rounded-xl bg-[#e9e4da]">
+              <Music2 size={26} className="text-[#7c766c]" />
             </div>
           )}
           <div className="min-w-0 flex-1 py-0.5">
-            <p className="truncate text-[16px] font-semibold leading-tight text-[#3a362f]">{post.song.title}</p>
+            <p className="truncate text-[16.5px] font-semibold leading-tight text-[#3a362f]">{post.song.title}</p>
             {post.song.artist && (
-              <p className="truncate text-[13.5px] leading-snug text-[#7c766c]">{post.song.artist}</p>
+              <p className="truncate text-[14px] leading-snug text-[#7c766c]">{post.song.artist}</p>
             )}
             {post.song.album && (
-              <p className="truncate text-[12.5px] leading-snug text-[#a39d92]">{post.song.album}</p>
+              <p className="truncate text-[13px] leading-snug text-[#a39d92]">{post.song.album}</p>
             )}
             {post.song.note && (
-              <p className="mt-1 line-clamp-2 text-[13px] italic leading-snug text-[#7c766c]">&ldquo;{post.song.note}&rdquo;</p>
+              <p className="mt-1 line-clamp-2 text-[14px] italic leading-snug text-[#7c766c]">&ldquo;{post.song.note}&rdquo;</p>
             )}
           </div>
-          <span className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white text-[#3a362f] shadow-sm">
-            <Play size={13} fill="currentColor" strokeWidth={0} />
+          <span className="mt-0.5 grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white text-[#3a362f] shadow-sm">
+            <Play size={16} fill="currentColor" strokeWidth={0} />
           </span>
         </a>
       )}
@@ -102,7 +108,9 @@ export function FeedPost({ post }: { post: FeedPostData }) {
       )}
 
       {post.caption && post.type !== "activity" && (
-        <p className="mt-2.5 px-1 text-[14px] leading-relaxed text-[#3a362f]">{post.caption}</p>
+        <p className="mt-2.5 px-1 text-[15.5px] text-[#3a362f]" style={{ lineHeight: 1.45 }}>
+          {post.caption}
+        </p>
       )}
 
       <PostActions

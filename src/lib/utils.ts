@@ -31,6 +31,21 @@ export function initials(name: string): string {
     .join("");
 }
 
+/**
+ * Extracts a human-readable message from anything a Supabase call might
+ * throw. `instanceof Error` alone misses PostgrestError/AuthError shapes
+ * that don't always chain to the global Error prototype, which used to
+ * hide the real reason behind a generic fallback.
+ */
+export function getErrorMessage(err: unknown, fallback = "Something went wrong."): string {
+  if (err instanceof Error && err.message) return err.message;
+  if (typeof err === "object" && err !== null && "message" in err) {
+    const msg = (err as { message?: unknown }).message;
+    if (typeof msg === "string" && msg) return msg;
+  }
+  return fallback;
+}
+
 export function generateInviteCode(): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no ambiguous chars
   let out = "";

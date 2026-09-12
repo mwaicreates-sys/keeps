@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { joinSpace } from "@/services/auth-client";
 import { useToast } from "@/components/Toast";
+import { getErrorMessage } from "@/lib/utils";
 
 export default function JoinSpacePage() {
   const [code, setCode] = useState("");
@@ -21,7 +22,7 @@ export default function JoinSpacePage() {
       router.replace("/home");
       router.refresh();
     } catch (err) {
-      show(err instanceof Error ? err.message : "That invite code didn't work.", "error");
+      show(getErrorMessage(err, "That invite code didn't work."), "error");
     } finally {
       setLoading(false);
     }

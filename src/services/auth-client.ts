@@ -7,9 +7,25 @@ export async function signUp(email: string, password: string, displayName: strin
   const supabase = createClient();
   const { data, error } = await supabase.auth.signUp({ email, password });
   if (error) throw error;
-  const user = data.user;
-  if (!user) throw new Error("Sign up did not return a user. Check your inbox to confirm your email.");
 
+  if (!data.user) {
+    throw new Error("Sign up did not return a user — please try again.");
+  }
+
+  if (!data.session) {
+    // No error and a user came back, but no session: this is Supabase's
+    // anti-enumeration behavior when the email is already registered (and
+    // confirmed). Without a session the next insert would run as `anon`
+    // and silently fail RLS, so fail loudly here instead.
+    if (data.user.identities?.length === 0 || !data.user.email_confirmed_at) {
+      throw new Error(
+        "This email needs email confirmation before it can sign in — check your inbox, or ask an admin to disable email confirmation for this project."
+      );
+    }
+    throw new Error("That email is already registered — try signing in instead.");
+  }
+
+  const user = data.user;
   const handle = (displayName || email.split("@")[0])
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "")

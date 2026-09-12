@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { signIn } from "@/services/auth-client";
 import { useToast } from "@/components/Toast";
+import { getErrorMessage } from "@/lib/utils";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -21,7 +22,7 @@ export default function LoginPage() {
       router.replace("/");
       router.refresh();
     } catch (err) {
-      show(err instanceof Error ? err.message : "Couldn't sign in.", "error");
+      show(getErrorMessage(err, "Couldn't sign in."), "error");
     } finally {
       setLoading(false);
     }

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createSpace } from "@/services/auth-client";
 import { useToast } from "@/components/Toast";
+import { getErrorMessage } from "@/lib/utils";
 
 export default function CreateSpacePage() {
   const [name, setName] = useState("");
@@ -20,7 +21,7 @@ export default function CreateSpacePage() {
       const space = await createSpace(name);
       setInviteCode(space.invite_code);
     } catch (err) {
-      show(err instanceof Error ? err.message : "Couldn't create your space.", "error");
+      show(getErrorMessage(err, "Couldn't create your space."), "error");
     } finally {
       setLoading(false);
     }

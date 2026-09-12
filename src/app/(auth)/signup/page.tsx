@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { signUp } from "@/services/auth-client";
 import { useToast } from "@/components/Toast";
+import { getErrorMessage } from "@/lib/utils";
 
 export default function SignupPage() {
   const [name, setName] = useState("");
@@ -22,7 +23,7 @@ export default function SignupPage() {
       router.replace("/space/create");
       router.refresh();
     } catch (err) {
-      show(err instanceof Error ? err.message : "Couldn't sign up.", "error");
+      show(getErrorMessage(err, "Couldn't sign up."), "error");
     } finally {
       setLoading(false);
     }

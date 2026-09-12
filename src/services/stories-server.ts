@@ -7,7 +7,7 @@ export async function getActiveStories(spaceId: string, userId: string): Promise
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("stories")
-    .select("*, author:profiles(*), story_views(user_id)")
+    .select("*, author:profiles!stories_author_id_fkey(*), story_views(user_id)")
     .eq("space_id", spaceId)
     .gt("expires_at", new Date().toISOString())
     .order("created_at", { ascending: true });

@@ -12,7 +12,7 @@ export async function getResurfaced(spaceId: string): Promise<Resurfaced[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("posts")
-    .select("*, author:profiles(*)")
+    .select("*, author:profiles!posts_author_id_fkey(*)")
     .eq("space_id", spaceId)
     .eq("saved_to_memories", true)
     .order("occurred_at", { ascending: true });

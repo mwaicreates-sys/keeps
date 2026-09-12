@@ -5,6 +5,7 @@ import { getSessionContext } from "@/services/session";
 import { BottomNav } from "@/components/BottomNav";
 import { DesktopSidebar } from "@/components/DesktopSidebar";
 import { TopBar } from "@/components/TopBar";
+import { HideOnHome } from "@/components/HideOnHome";
 import { SessionProvider } from "@/components/SessionProvider";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -16,7 +17,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <div className="flex min-h-dvh bg-paper">
         <DesktopSidebar />
         <div className="flex min-h-dvh flex-1 flex-col">
-          <TopBar userId={ctx.userId} />
+          <HideOnHome>
+            <TopBar userId={ctx.userId} />
+          </HideOnHome>
           <div className="hidden items-center justify-end gap-1 border-b border-line px-6 py-3 md:flex">
             <Link href="/search" aria-label="Search" className="rounded-full p-2 text-ink hover:bg-accent-soft">
               <Search size={19} strokeWidth={1.8} />

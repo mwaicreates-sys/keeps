@@ -29,10 +29,15 @@ export default function LoginPage() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4 rounded-3xl border border-line bg-paper-raised p-6 shadow-sm">
-      <h1 className="font-display text-xl">Welcome back</h1>
+    <form
+      onSubmit={onSubmit}
+      className="space-y-5 rounded-[28px] border border-white/10 bg-white/[0.06] p-6 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.6)] backdrop-blur"
+    >
+      <h1 className="font-chunky text-2xl font-extrabold text-white">Welcome back</h1>
       <div className="space-y-1.5">
-        <label htmlFor="email" className="text-sm text-ink-soft">Email</label>
+        <label htmlFor="email" className="text-sm font-medium text-white/60">
+          Email
+        </label>
         <input
           id="email"
           type="email"
@@ -40,11 +45,13 @@ export default function LoginPage() {
           autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded-xl border border-line bg-paper px-3.5 py-2.5 text-[15px] outline-none focus:border-accent"
+          className="w-full rounded-full border border-white/10 bg-white/5 px-4 py-3 text-[15px] text-white outline-none placeholder:text-white/30 focus:border-[#4ade80]"
         />
       </div>
       <div className="space-y-1.5">
-        <label htmlFor="password" className="text-sm text-ink-soft">Password</label>
+        <label htmlFor="password" className="text-sm font-medium text-white/60">
+          Password
+        </label>
         <input
           id="password"
           type="password"
@@ -52,18 +59,21 @@ export default function LoginPage() {
           autoComplete="current-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full rounded-xl border border-line bg-paper px-3.5 py-2.5 text-[15px] outline-none focus:border-accent"
+          className="w-full rounded-full border border-white/10 bg-white/5 px-4 py-3 text-[15px] text-white outline-none placeholder:text-white/30 focus:border-[#4ade80]"
         />
       </div>
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-full bg-ink py-3 text-[15px] font-medium text-paper transition active:scale-[0.98] disabled:opacity-50"
+        className="font-chunky w-full rounded-full bg-[#4ade80] py-3.5 text-[15px] font-bold text-[#0b0b0d] transition active:scale-[0.98] disabled:opacity-50"
       >
         {loading ? "Signing in…" : "Sign in"}
       </button>
-      <p className="text-center text-sm text-ink-soft">
-        New here? <Link href="/signup" className="font-medium text-accent">Create an account</Link>
+      <p className="text-center text-sm text-white/50">
+        New here?{" "}
+        <Link href="/signup" className="font-semibold text-[#4ade80]">
+          Create an account
+        </Link>
       </p>
     </form>
   );

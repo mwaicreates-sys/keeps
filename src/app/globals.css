@@ -59,6 +59,10 @@ body {
   font-family: var(--font-fraunces), Georgia, serif;
 }
 
+.font-chunky {
+  font-family: var(--font-baloo), system-ui, sans-serif;
+}
+
 ::selection {
   background: var(--accent-soft);
 }

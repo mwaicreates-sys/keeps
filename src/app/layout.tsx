@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Fraunces, Inter } from "next/font/google";
+import { Fraunces, Inter, Baloo_2 } from "next/font/google";
 import { ToastProvider } from "@/components/Toast";
 import "./globals.css";
 
@@ -13,6 +13,12 @@ const fraunces = Fraunces({
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
+});
+
+const baloo = Baloo_2({
+  variable: "--font-baloo",
+  subsets: ["latin"],
+  weight: ["600", "700", "800"],
 });
 
 export const metadata: Metadata = {
@@ -32,7 +38,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className={`${fraunces.variable} ${inter.variable} antialiased`}>
+      <body className={`${fraunces.variable} ${inter.variable} ${baloo.variable} antialiased`}>
         <ToastProvider>{children}</ToastProvider>
       </body>
     </html>

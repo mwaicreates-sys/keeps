@@ -29,15 +29,15 @@ export default function CreateSpacePage() {
 
   if (inviteCode) {
     return (
-      <div className="space-y-5 rounded-3xl border border-line bg-paper-raised p-6 text-center shadow-sm">
-        <h1 className="font-display text-xl">Your space is ready</h1>
-        <p className="text-sm text-ink-soft">Send this code to the one person who joins you here.</p>
-        <p className="rounded-2xl border border-dashed border-accent/40 bg-accent-soft py-4 font-display text-3xl tracking-[0.3em] text-accent">
+      <div className="space-y-5 rounded-[28px] border border-white/10 bg-white/[0.06] p-6 text-center shadow-[0_20px_60px_-15px_rgba(0,0,0,0.6)] backdrop-blur">
+        <h1 className="font-chunky text-2xl font-extrabold text-white">Your space is ready</h1>
+        <p className="text-sm text-white/60">Send this code to the one person who joins you here.</p>
+        <p className="font-chunky rounded-2xl border border-dashed border-[#4ade80]/40 bg-[#4ade80]/10 py-4 text-3xl font-extrabold tracking-[0.3em] text-[#4ade80]">
           {inviteCode}
         </p>
         <button
           onClick={() => router.replace("/home")}
-          className="w-full rounded-full bg-ink py-3 text-[15px] font-medium text-paper active:scale-[0.98]"
+          className="font-chunky w-full rounded-full bg-[#4ade80] py-3.5 text-[15px] font-bold text-[#0b0b0d] active:scale-[0.98]"
         >
           Go to Home
         </button>
@@ -46,25 +46,31 @@ export default function CreateSpacePage() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4 rounded-3xl border border-line bg-paper-raised p-6 shadow-sm">
-      <h1 className="font-display text-xl">Start your space</h1>
-      <p className="text-sm text-ink-soft">Give it a name only the two of you will see.</p>
+    <form
+      onSubmit={onSubmit}
+      className="space-y-4 rounded-[28px] border border-white/10 bg-white/[0.06] p-6 shadow-[0_20px_60px_-15px_rgba(0,0,0,0.6)] backdrop-blur"
+    >
+      <h1 className="font-chunky text-2xl font-extrabold text-white">Start your space</h1>
+      <p className="text-sm text-white/60">Give it a name only the two of you will see.</p>
       <input
         required
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="e.g. Gerry & Cuz"
-        className="w-full rounded-xl border border-line bg-paper px-3.5 py-2.5 text-[15px] outline-none focus:border-accent"
+        className="w-full rounded-full border border-white/10 bg-white/5 px-4 py-3 text-[15px] text-white outline-none placeholder:text-white/30 focus:border-[#4ade80]"
       />
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-full bg-ink py-3 text-[15px] font-medium text-paper transition active:scale-[0.98] disabled:opacity-50"
+        className="font-chunky w-full rounded-full bg-[#4ade80] py-3.5 text-[15px] font-bold text-[#0b0b0d] transition active:scale-[0.98] disabled:opacity-50"
       >
         {loading ? "Creating…" : "Create space"}
       </button>
-      <p className="text-center text-sm text-ink-soft">
-        Got an invite code? <Link href="/space/join" className="font-medium text-accent">Join a space</Link>
+      <p className="text-center text-sm text-white/50">
+        Got an invite code?{" "}
+        <Link href="/space/join" className="font-semibold text-[#4ade80]">
+          Join a space
+        </Link>
       </p>
     </form>
   );

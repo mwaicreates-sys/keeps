@@ -6,11 +6,14 @@ import { Avatar } from "@/components/Avatar";
 import { MemoryCard } from "@/components/MemoryCard";
 import { EmptyState } from "@/components/EmptyState";
 import { AccountSwitcher } from "@/components/profile/AccountSwitcher";
+import { AlbumCard, type AlbumSummary } from "@/components/profile/AlbumCard";
+import { CreateAlbumButton } from "@/components/profile/CreateAlbumButton";
 import { timeAgo } from "@/lib/utils";
-import { Grid3x3, ListOrdered, Star, Bookmark, Users, Headphones, ChevronRight, Sparkles } from "lucide-react";
+import { Grid3x3, ListOrdered, Star, Bookmark, Users, Headphones, ChevronRight, Sparkles, FolderHeart, Pencil } from "lucide-react";
 
 const TABS = [
   { key: "posts", label: "Posts", icon: Grid3x3 },
+  { key: "albums", label: "Albums", icon: FolderHeart },
   { key: "top5s", label: "Top 5s", icon: ListOrdered },
   { key: "favorites", label: "Favorites", icon: Star },
   { key: "saved", label: "Saved", icon: Bookmark },
@@ -53,8 +56,21 @@ export default async function ProfilePage({
 
   let tabPosts = posts;
   let top5s: { id: string; topic: string; created_at: string }[] = [];
+  let albums: AlbumSummary[] = [];
 
-  if (tab === "favorites") {
+  if (tab === "albums") {
+    const { data: collectionsRaw } = await supabase
+      .from("collections")
+      .select("id, name, created_at, collection_items(post_id, posts(media:post_media(url)))")
+      .eq("space_id", ctx.space.id)
+      .order("created_at", { ascending: false });
+
+    albums = (collectionsRaw ?? []).map((c) => {
+      const items = (c.collection_items ?? []) as { posts: { media: { url: string }[] | null } | null }[];
+      const covers = items.map((i) => i.posts?.media?.[0]?.url).filter((u): u is string => !!u);
+      return { id: c.id as string, name: c.name as string, count: items.length, createdAt: c.created_at as string, covers };
+    });
+  } else if (tab === "favorites") {
     tabPosts = posts.filter((p) => p.type === "favorite");
   } else if (tab === "top5s") {
     const { data } = await supabase
@@ -76,6 +92,13 @@ export default async function ProfilePage({
         className="relative mb-4 overflow-hidden rounded-[32px] px-5 pb-5 pt-8 text-white"
         style={{ background: "linear-gradient(160deg, #3d1030 0%, #1a0f1e 55%, #0b0b0d 100%)" }}
       >
+        <Link
+          href="/profile/edit"
+          className="absolute right-4 top-4 flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1.5 text-xs font-medium backdrop-blur"
+        >
+          <Pencil size={12} /> Edit profile
+        </Link>
+
         <div className="relative mx-auto mb-4 w-fit">
           <div className="rounded-3xl ring-4 ring-white/10">
             <Avatar name={ctx.profile.display_name} url={ctx.profile.avatar_url} size={96} shape="square" />
@@ -197,7 +220,23 @@ export default async function ProfilePage({
         ))}
       </div>
 
-      {tab === "top5s" ? (
+      {tab === "albums" ? (
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <p className="text-sm font-medium text-ink-soft">Your albums</p>
+            <CreateAlbumButton spaceId={ctx.space.id} userId={ctx.userId} />
+          </div>
+          {albums.length === 0 ? (
+            <EmptyState icon={FolderHeart} title="No albums yet" body="Create one and add memories to it from any Memory's detail page." />
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {albums.map((a) => (
+                <AlbumCard key={a.id} album={a} />
+              ))}
+            </div>
+          )}
+        </div>
+      ) : tab === "top5s" ? (
         top5s.length === 0 ? (
           <EmptyState icon={ListOrdered} title="No Top 5s yet" body="Play My Top 5 to start building history." />
         ) : (

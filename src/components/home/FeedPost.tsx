@@ -76,26 +76,26 @@ export function FeedPost({ post }: { post: FeedPostData }) {
         >
           {post.song.artwork_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={post.song.artwork_url} alt="" className="h-24 w-24 shrink-0 rounded-xl object-cover" />
+            <img src={post.song.artwork_url} alt="" className="h-[104px] w-[104px] shrink-0 rounded-xl object-cover" />
           ) : (
-            <div className="grid h-24 w-24 shrink-0 place-items-center rounded-xl bg-[#e9e4da]">
-              <Music2 size={28} className="text-[#7c766c]" />
+            <div className="grid h-[104px] w-[104px] shrink-0 place-items-center rounded-xl bg-[#e9e4da]">
+              <Music2 size={30} className="text-[#7c766c]" />
             </div>
           )}
           <div className="min-w-0 flex-1 py-1">
-            <p className="truncate text-[17px] font-semibold leading-tight text-[#3a362f]">{post.song.title}</p>
+            <p className="truncate text-[18px] font-semibold leading-tight text-[#3a362f]">{post.song.title}</p>
             {post.song.artist && (
-              <p className="truncate text-[14.5px] font-medium leading-snug text-[#7c766c]">{post.song.artist}</p>
+              <p className="truncate text-[15.5px] font-medium leading-snug text-[#7c766c]">{post.song.artist}</p>
             )}
             {post.song.album && (
-              <p className="truncate text-[13px] leading-snug text-[#a39d92]">{post.song.album}</p>
+              <p className="truncate text-[13.5px] leading-snug text-[#a39d92]">{post.song.album}</p>
             )}
             {post.song.note && (
-              <p className="mt-1 line-clamp-2 text-[14px] italic leading-snug text-[#7c766c]">&ldquo;{post.song.note}&rdquo;</p>
+              <p className="mt-1 line-clamp-2 text-[14.5px] italic leading-snug text-[#7c766c]">&ldquo;{post.song.note}&rdquo;</p>
             )}
           </div>
-          <span className="mt-0.5 grid h-12 w-12 shrink-0 place-items-center rounded-full bg-white text-[#3a362f] shadow-sm">
-            <Play size={18} fill="currentColor" strokeWidth={0} />
+          <span className="mt-0.5 grid shrink-0 place-items-center rounded-full bg-white text-[#3a362f] shadow-sm" style={{ height: 52, width: 52 }}>
+            <Play size={20} fill="currentColor" strokeWidth={0} />
           </span>
         </a>
       )}

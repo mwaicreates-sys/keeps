@@ -7,27 +7,27 @@ import { Sparkles, Search, Bell } from "lucide-react";
  */
 export function HomeHeader({ unreadCount }: { unreadCount: number }) {
   return (
-    <div className="relative flex h-[72px] items-center justify-center px-3">
+    <div className="relative flex h-20 items-center justify-center px-3">
       <Link
         href="/search"
         aria-label="Search"
-        className="absolute left-1 grid h-12 w-12 place-items-center rounded-full text-[#4a453d]"
+        className="absolute left-1 grid h-14 w-14 place-items-center rounded-full text-[#3a362f]"
       >
-        <Search size={27} strokeWidth={2} />
+        <Search size={30} strokeWidth={2.1} />
       </Link>
-      <p className="flex items-center gap-2 text-[24px] font-bold tracking-tight text-[#3a362f]">
-        <Sparkles size={19} className="text-[#c2ab5a]" />
+      <p className="flex items-center gap-2 text-[27px] font-bold tracking-tight text-[#3a362f]">
+        <Sparkles size={21} className="text-[#c2ab5a]" />
         keeps
       </p>
       <Link
         href="/notifications"
         aria-label="Notifications"
-        className="absolute right-1 grid h-12 w-12 place-items-center rounded-full text-[#4a453d]"
+        className="absolute right-1 grid h-14 w-14 place-items-center rounded-full text-[#3a362f]"
       >
         {unreadCount > 0 && (
-          <span className="absolute right-2.5 top-2.5 h-2.5 w-2.5 rounded-full bg-[#ec4899] ring-2 ring-white" />
+          <span className="absolute right-3 top-3 h-2.5 w-2.5 rounded-full bg-[#ec4899] ring-2 ring-white" />
         )}
-        <Bell size={27} strokeWidth={2} />
+        <Bell size={30} strokeWidth={2.1} />
       </Link>
     </div>
   );

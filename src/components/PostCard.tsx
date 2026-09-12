@@ -87,15 +87,39 @@ export function PostCard({ post }: { post: FeedPost }) {
         {isMemory && <Sparkles size={16} className="text-gold" aria-label="Saved to memories" />}
       </header>
 
-      {post.media.length > 0 && (
-        <div className={cn("mb-3 grid gap-1 overflow-hidden rounded-2xl", post.media.length > 1 && "grid-cols-2")}>
-          {post.media.slice(0, 4).map((m) =>
-            m.media_type === "video" ? (
-              <video key={m.id} src={m.url} controls className="max-h-[520px] w-full bg-black object-contain" />
-            ) : (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img key={m.id} src={m.url} alt="" loading="lazy" className="max-h-[520px] w-full object-cover" />
-            )
+      {post.media.length === 1 &&
+        (post.media[0].media_type === "video" ? (
+          <video src={post.media[0].url} controls className="mb-3 max-h-[520px] w-full rounded-2xl bg-black object-contain" />
+        ) : (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={post.media[0].url}
+            alt=""
+            loading="lazy"
+            className="mb-3 max-h-[520px] w-full rounded-2xl object-cover"
+          />
+        ))}
+
+      {post.media.length > 1 && (
+        <div className="relative mb-3 aspect-[4/5] w-full">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={post.media[0].url}
+            alt=""
+            loading="lazy"
+            className="absolute left-0 top-0 h-[85%] w-[82%] -rotate-2 rounded-2xl border-4 border-paper object-cover shadow-md"
+          />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={post.media[1].url}
+            alt=""
+            loading="lazy"
+            className="absolute bottom-0 right-0 h-[55%] w-[55%] rotate-3 rounded-2xl border-4 border-paper object-cover shadow-lg"
+          />
+          {post.media.length > 2 && (
+            <span className="absolute bottom-2 right-2 grid h-9 w-9 place-items-center rounded-full bg-ink/80 text-xs font-semibold text-paper">
+              +{post.media.length - 2}
+            </span>
           )}
         </div>
       )}

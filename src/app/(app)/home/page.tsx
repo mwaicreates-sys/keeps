@@ -8,6 +8,18 @@ import { PostCard } from "@/components/PostCard";
 import { EmptyState } from "@/components/EmptyState";
 import { Camera } from "lucide-react";
 
+// Home is always the light, "alive" social feed regardless of system
+// theme — Memories/Play/Profile each get their own visual language, but
+// Home's identity is this bright, media-first surface.
+const HOME_LIGHT_THEME = {
+  "--paper": "#fbf9f6",
+  "--paper-raised": "#ffffff",
+  "--ink": "#1c1a17",
+  "--ink-soft": "#7c766c",
+  "--line": "#eee8de",
+  "--accent-soft": "#f6ddce",
+} as React.CSSProperties;
+
 export default async function HomePage() {
   const ctx = await getSessionContext();
   if (!ctx) return null;
@@ -19,7 +31,7 @@ export default async function HomePage() {
   ]);
 
   return (
-    <div className="mx-auto max-w-xl md:max-w-2xl md:px-4 md:py-6">
+    <div className="mx-auto max-w-xl bg-paper md:max-w-2xl md:rounded-3xl md:px-4 md:py-6" style={HOME_LIGHT_THEME}>
       <StoryRail stories={stories} currentUserId={ctx.userId} />
 
       {resurfaced.length > 0 && (

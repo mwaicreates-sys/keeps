@@ -5,7 +5,8 @@ import { getPostsByAuthor } from "@/services/posts-server";
 import { Avatar } from "@/components/Avatar";
 import { MemoryCard } from "@/components/MemoryCard";
 import { EmptyState } from "@/components/EmptyState";
-import { Grid3x3, ListOrdered, Star, Bookmark, Users } from "lucide-react";
+import { timeAgo } from "@/lib/utils";
+import { Grid3x3, ListOrdered, Star, Bookmark, Users, Headphones, ChevronRight, Sparkles } from "lucide-react";
 
 const TABS = [
   { key: "posts", label: "Posts", icon: Grid3x3 },
@@ -24,11 +25,30 @@ export default async function ProfilePage({
   if (!ctx) return null;
   const supabase = await createClient();
 
-  const [{ count: memoryCount }, { count: gameCount }, posts] = await Promise.all([
+  const [{ count: memoryCount }, { count: gameCount }, posts, { data: lastSongRow }] = await Promise.all([
     supabase.from("posts").select("id", { count: "exact", head: true }).eq("space_id", ctx.space.id).eq("saved_to_memories", true),
     supabase.from("game_sessions").select("id", { count: "exact", head: true }).eq("space_id", ctx.space.id).eq("status", "completed"),
     getPostsByAuthor(ctx.space.id, ctx.userId, ctx.userId),
+    supabase
+      .from("posts")
+      .select("id, created_at, author:profiles!posts_author_id_fkey(display_name), song:post_song_metadata(title, artist, url)")
+      .eq("space_id", ctx.space.id)
+      .eq("type", "song")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
+
+  const lastSong = lastSongRow?.song
+    ? {
+        postId: lastSongRow.id,
+        title: lastSongRow.song.title,
+        artist: lastSongRow.song.artist,
+        url: lastSongRow.song.url,
+        author: (lastSongRow.author as unknown as { display_name: string } | null)?.display_name,
+        createdAt: lastSongRow.created_at,
+      }
+    : null;
 
   let tabPosts = posts;
   let top5s: { id: string; topic: string; created_at: string }[] = [];
@@ -51,29 +71,114 @@ export default async function ProfilePage({
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6">
-      <div className="mb-6 flex items-start gap-4">
-        <Avatar name={ctx.profile.display_name} url={ctx.profile.avatar_url} size={72} />
-        <div className="min-w-0 flex-1">
-          <p className="font-display text-xl">{ctx.profile.display_name}</p>
-          <p className="text-sm text-ink-soft">@{ctx.profile.handle}</p>
-          {ctx.profile.bio && <p className="mt-1 text-sm">{ctx.profile.bio}</p>}
-          <div className="mt-2 flex gap-4 text-xs text-ink-soft">
-            <span><strong className="text-ink">{memoryCount ?? 0}</strong> memories</span>
-            <span><strong className="text-ink">{gameCount ?? 0}</strong> games played</span>
+      <div
+        className="relative mb-4 overflow-hidden rounded-[32px] px-5 pb-5 pt-8 text-white"
+        style={{ background: "linear-gradient(160deg, #3d1030 0%, #1a0f1e 55%, #0b0b0d 100%)" }}
+      >
+        <div className="relative mx-auto mb-4 w-fit">
+          <div className="rounded-3xl ring-4 ring-white/10">
+            <Avatar name={ctx.profile.display_name} url={ctx.profile.avatar_url} size={96} shape="square" />
           </div>
-          {ctx.profile.interests.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {ctx.profile.interests.map((i) => (
-                <span key={i} className="rounded-full bg-accent-soft px-2.5 py-0.5 text-xs text-accent">{i}</span>
-              ))}
-            </div>
+          <span className="absolute -left-3 -top-2 grid h-8 w-8 rotate-[-12deg] place-items-center rounded-2xl bg-[#4ade80] text-black shadow-lg">
+            <Sparkles size={16} />
+          </span>
+          {(memoryCount ?? 0) > 0 && (
+            <span className="font-chunky absolute -bottom-1 -right-3 rounded-2xl bg-gradient-to-br from-fuchsia-500 to-indigo-500 px-2.5 py-1 text-xs font-extrabold text-white shadow-lg">
+              {memoryCount}
+            </span>
           )}
         </div>
+
+        <div className="text-center">
+          <p className="font-chunky flex items-center justify-center gap-1.5 text-xl font-extrabold">
+            {ctx.profile.display_name}
+          </p>
+          <p className="text-sm text-white/50">@{ctx.profile.handle}</p>
+        </div>
+
+        {ctx.otherMember && (
+          <Link
+            href="/profile/us"
+            className="mx-auto mt-4 flex w-fit items-center gap-2 rounded-full bg-white/10 py-1.5 pl-1.5 pr-4 text-sm backdrop-blur"
+          >
+            <Avatar name={ctx.otherMember.display_name} url={ctx.otherMember.avatar_url} size={22} />
+            with <strong>{ctx.otherMember.display_name}</strong>
+          </Link>
+        )}
+
+        {ctx.profile.interests.length > 0 && (
+          <div className="mt-4 flex flex-wrap justify-center gap-1.5">
+            {ctx.profile.interests.map((i) => (
+              <span key={i} className="rounded-full bg-white/10 px-2.5 py-0.5 text-xs text-white/70">
+                {i}
+              </span>
+            ))}
+          </div>
+        )}
+
+        {lastSong && (
+          <a
+            href={lastSong.url ?? `/memories/${lastSong.postId}`}
+            target={lastSong.url ? "_blank" : undefined}
+            rel="noreferrer"
+            className="mt-5 flex items-center gap-3 rounded-full bg-black/30 px-4 py-3 text-left backdrop-blur"
+          >
+            <Headphones size={18} className="shrink-0 text-[#4ade80]" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold">
+                {lastSong.title} {lastSong.artist && <span className="font-normal text-white/60">· {lastSong.artist}</span>}
+              </p>
+              <p className="text-xs text-white/40">
+                Last shared by {lastSong.author} · {timeAgo(lastSong.createdAt)}
+              </p>
+            </div>
+          </a>
+        )}
       </div>
 
-      <Link href="/profile/us" className="mb-6 flex items-center gap-2 rounded-2xl border border-dashed border-gold/50 bg-accent-soft/30 px-4 py-3 text-sm">
-        <Users size={16} className="text-gold" /> See your <strong className="mx-1">Us</strong> page
-      </Link>
+      {posts.length > 0 && (
+        <div className="mb-6">
+          <div className="mb-2 flex items-center justify-between">
+            <p className="text-sm font-medium text-ink-soft">Recent Drops</p>
+            <Link href="/profile?tab=posts" className="flex items-center text-xs text-accent">
+              See all <ChevronRight size={14} />
+            </Link>
+          </div>
+          <ul className="space-y-1.5">
+            {posts.slice(0, 3).map((p) => (
+              <li key={p.id}>
+                <Link
+                  href={`/memories/${p.id}`}
+                  className="flex items-center gap-3 rounded-2xl border border-line px-3 py-2"
+                >
+                  {p.media[0]?.url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={p.media[0].url} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover" />
+                  ) : (
+                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent">
+                      <Sparkles size={14} />
+                    </div>
+                  )}
+                  <span className="min-w-0 flex-1 truncate text-sm">
+                    {p.caption || p.song?.title || p.favorite?.item_name || `A ${p.type}`}
+                  </span>
+                  <span className="shrink-0 rounded-full bg-paper-raised px-2.5 py-1 text-xs text-ink-soft">
+                    {timeAgo(p.created_at)}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="mb-4 flex gap-4 text-xs text-ink-soft">
+        <span><strong className="text-ink">{memoryCount ?? 0}</strong> memories</span>
+        <span><strong className="text-ink">{gameCount ?? 0}</strong> games played</span>
+        <Link href="/profile/us" className="ml-auto flex items-center gap-1.5 font-medium text-gold">
+          <Users size={14} /> Us page
+        </Link>
+      </div>
 
       <div className="mb-4 flex gap-1 overflow-x-auto border-b border-line">
         {TABS.map(({ key, label, icon: Icon }) => (

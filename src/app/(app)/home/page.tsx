@@ -40,10 +40,10 @@ export default async function HomePage() {
             <Link
               key={r.post.id}
               href={`/memories/${r.post.id}`}
-              className="flex min-h-[82px] w-40 shrink-0 flex-col justify-center gap-1 rounded-2xl bg-white p-3.5 shadow-[0_2px_12px_-6px_rgba(20,18,15,0.12)]"
+              className="flex min-h-[86px] w-[168px] shrink-0 flex-col justify-center gap-1.5 rounded-2xl bg-white p-4 shadow-[0_2px_12px_-6px_rgba(20,18,15,0.12)]"
             >
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-[#d4a72c]">{r.label}</p>
-              <p className="truncate text-[15px] text-[#7c766c]">{r.post.caption || `A ${r.post.type} you kept`}</p>
+              <p className="text-[12px] font-bold uppercase tracking-wide text-[#c99a2e]">{r.label}</p>
+              <p className="truncate text-[15.5px] font-medium text-[#4a453d]">{r.post.caption || `A ${r.post.type} you kept`}</p>
             </Link>
           ))}
         </div>

@@ -45,15 +45,15 @@ export function PostHeader({
   createdAt: string;
 }) {
   return (
-    <div className="flex min-h-[58px] items-center gap-3 px-1 pb-2.5">
-      <Avatar name={author.display_name} url={author.avatar_url} size={42} />
+    <div className="flex min-h-[64px] items-center gap-3 px-1 pb-3">
+      <Avatar name={author.display_name} url={author.avatar_url} size={48} />
       <div className="min-w-0 flex-1">
-        <p className="text-[15.5px] leading-tight text-[#3a362f]">
+        <p className="text-[16.5px] leading-tight text-[#3a362f]">
           <span className="font-semibold">{author.display_name}</span>{" "}
-          <span className="text-[14px] text-[#7c766c]">{activityLine({ type, caption, mediaCount })}</span>
+          <span className="text-[14.5px] text-[#7c766c]">{activityLine({ type, caption, mediaCount })}</span>
         </p>
       </div>
-      <span className="shrink-0 text-[13px] text-[#a39d92]">{timeAgo(createdAt)}</span>
+      <span className="shrink-0 text-[13px] font-medium text-[#a39d92]">{timeAgo(createdAt)}</span>
     </div>
   );
 }

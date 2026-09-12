@@ -19,6 +19,7 @@ export function MainSurface({ children }: { children: React.ReactNode }) {
     pathname.startsWith("/home") ||
     pathname === "/memories" ||
     pathname.startsWith("/memories/") ||
+    pathname.startsWith("/collections/") ||
     pathname === "/drop" ||
     pathname === "/play" ||
     pathname === "/profile" ||

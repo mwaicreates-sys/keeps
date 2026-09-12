@@ -7,11 +7,12 @@ function dateChip(occurredAt: string) {
 }
 
 /**
- * The Memories grid's tile — one coherent visual system (rounded, light,
- * edge-to-edge imagery where there is any) but a different treatment per
- * Drop type, so a song or a text thought reads as useful content instead
- * of a blank icon block. Kept separate from the shared MemoryCard (used
- * by Profile and Collection pages) so this redesign doesn't reach either.
+ * The Memories/Collections grid tile — one coherent visual system
+ * (rounded, light, edge-to-edge imagery where there is any) but a
+ * different treatment per Drop type, so a song or a text thought reads as
+ * useful content instead of a blank icon block. Kept separate from the
+ * shared MemoryCard (used by Profile's own tabs) so future changes here
+ * don't reach Profile without a deliberate decision to share it there too.
  */
 export function MemoryTile({ post }: { post: FeedPost }) {
   const cover = post.media[0]?.url;

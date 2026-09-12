@@ -8,6 +8,7 @@ import { DropTypeCard } from "@/components/drop/DropTypeCard";
 import { RecentMediaRail } from "@/components/drop/RecentMediaRail";
 import { DropIdeas } from "@/components/drop/DropIdeas";
 import { DropComposer } from "@/components/drop/DropComposer";
+import { PageIntro } from "@/components/app/PageIntro";
 
 const PRIMARY_TYPES: DropType[] = ["photo", "video", "song", "text", "activity", "favorite"];
 
@@ -33,12 +34,10 @@ export function DropLanding({
 
   return (
     <div>
-      <div className="px-4 pb-4 pt-1">
-        <h1 className="text-[29px] font-bold tracking-tight text-[#3a362f]">{isStory ? "New story" : "Drop something"}</h1>
-        <p className="mt-0.5 text-[15px] text-[#a39d92]">
-          {isStory ? "Visible for 24 hours, unless you save it." : "Capture the moments, big or small."}
-        </p>
-      </div>
+      <PageIntro
+        title={isStory ? "New story" : "Drop something"}
+        subtitle={isStory ? "Visible for 24 hours, unless you save it." : "Capture the moments, big or small."}
+      />
 
       <div className="mb-5 grid grid-cols-2 gap-3 px-4">
         {PRIMARY_TYPES.map((type) => (

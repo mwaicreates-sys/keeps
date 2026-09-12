@@ -3,6 +3,7 @@ import { getSessionContext } from "@/services/session";
 import { createClient } from "@/lib/supabase/server";
 import { searchSpace } from "@/services/search-server";
 import { HomeHeader } from "@/components/home/HomeHeader";
+import { PageIntro } from "@/components/app/PageIntro";
 import { EmptyState } from "@/components/EmptyState";
 import { Search as SearchIcon, Music2, FolderHeart, Gamepad2, Sparkles } from "lucide-react";
 
@@ -63,10 +64,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
     <div className="mx-auto max-w-xl pb-4 md:max-w-2xl md:py-4">
       <HomeHeader unreadCount={unreadCount ?? 0} />
 
-      <div className="px-4 pb-4 pt-1">
-        <h1 className="text-[27px] font-bold tracking-tight text-[#3a362f]">Search</h1>
-        <p className="mt-0.5 text-[15px] text-[#a39d92]">Posts, memories, songs, games, collections, and tags.</p>
-      </div>
+      <PageIntro title="Search" subtitle="Posts, memories, songs, games, collections, and tags." />
 
       <form action="/search" className="mb-5 px-4">
         <label className="flex items-center gap-2 rounded-full bg-white px-4 py-3 shadow-[0_1px_8px_-4px_rgba(20,18,15,0.15)]">

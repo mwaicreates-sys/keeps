@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getSessionContext } from "@/services/session";
 import { createClient } from "@/lib/supabase/server";
 import { HomeHeader } from "@/components/home/HomeHeader";
+import { PageIntro } from "@/components/app/PageIntro";
 import { NotificationsList } from "@/components/NotificationsList";
 
 const FILTERS = [
@@ -37,10 +38,7 @@ export default async function NotificationsPage({
     <div className="mx-auto max-w-xl pb-4 md:max-w-2xl md:py-4">
       <HomeHeader unreadCount={unreadCount ?? 0} />
 
-      <div className="px-4 pb-4 pt-1">
-        <h1 className="text-[27px] font-bold tracking-tight text-[#3a362f]">Notifications</h1>
-        <p className="mt-0.5 text-[15px] text-[#a39d92]">Everything you might have missed.</p>
-      </div>
+      <PageIntro title="Notifications" subtitle="Everything you might have missed." />
 
       <div className="no-scrollbar mb-4 flex gap-2 overflow-x-auto px-4 pb-1">
         {FILTERS.map((f) => (

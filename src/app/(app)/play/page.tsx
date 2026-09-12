@@ -1,6 +1,7 @@
 import { getSessionContext } from "@/services/session";
 import { createClient } from "@/lib/supabase/server";
 import { HomeHeader } from "@/components/home/HomeHeader";
+import { PageIntro } from "@/components/app/PageIntro";
 import { PlayGameCard } from "@/components/play/PlayGameCard";
 import {
   ThisOrThatPreview,
@@ -32,12 +33,7 @@ export default async function PlayHubPage() {
     <div className="mx-auto max-w-xl pb-4 md:max-w-2xl md:py-4">
       <HomeHeader unreadCount={unreadCount ?? 0} />
 
-      <div className="px-4 pb-4 pt-1">
-        <h1 className="text-[32px] font-extrabold tracking-tight text-[#3a362f]">Play</h1>
-        <p className="mt-0.5 text-[16px] leading-[1.4] text-[#a39d92]">
-          Little games that say more than a chat ever could.
-        </p>
-      </div>
+      <PageIntro title="Play" subtitle="Little games that say more than a chat ever could." />
 
       <div className="grid grid-cols-2 gap-3 px-4">
         <PlayGameCard

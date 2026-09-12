@@ -4,6 +4,7 @@ import { getMemories } from "@/services/posts-server";
 import { getResurfaced } from "@/services/resurfacing";
 import { createClient } from "@/lib/supabase/server";
 import { HomeHeader } from "@/components/home/HomeHeader";
+import { PageIntro } from "@/components/app/PageIntro";
 import { MemoryTile } from "@/components/memories/MemoryTile";
 import { CollectionCard, type CollectionSummary } from "@/components/memories/CollectionCard";
 import { MemoriesSearchBar } from "@/components/memories/MemoriesSearchBar";
@@ -74,10 +75,7 @@ export default async function MemoriesPage({
     <div className="mx-auto max-w-xl pb-4 md:max-w-2xl md:py-4">
       <HomeHeader unreadCount={unreadCount ?? 0} />
 
-      <div className="px-4 pb-4 pt-1">
-        <h1 className="text-[27px] font-bold tracking-tight text-[#3a362f]">Memories</h1>
-        <p className="mt-0.5 text-[15px] text-[#a39d92]">Everything worth keeping.</p>
-      </div>
+      <PageIntro title="Memories" subtitle="Everything worth keeping." />
 
       {collections.length > 0 && (
         <div className="no-scrollbar mb-5 flex gap-3 overflow-x-auto px-4 pb-1">

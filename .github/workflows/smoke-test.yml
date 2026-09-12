@@ -1,0 +1,26 @@
+name: Live smoke test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      # Public anon key — safe to commit; it's the same key the client
+      # bundle ships to every browser, gated entirely by RLS.
+      NEXT_PUBLIC_SUPABASE_URL: https://lawcnetonjpzqkrrnbnq.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxhd2NuZXRvbmpwenFrcnJuYm5xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyMjA3MzUsImV4cCI6MjEwNDc5NjczNX0.RKTlhNOZeqyCr9MXg_0Ub2eXbHE4WJaGKP2SovhXgcI
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: Start server
+        run: |
+          npm run start -- -p 3000 &
+          npx wait-on http://localhost:3000 --timeout 60000
+      - run: node scripts/smoke.mjs

@@ -1,5 +1,5 @@
 import { mbGet } from "@/lib/musicbrainz/client";
-import { getArtistImageViaWikidata } from "@/lib/wikidata/client";
+import { getArtistImageViaWikidata, getWikimediaImageForQid } from "@/lib/wikidata/client";
 import { getReleaseGroupCoverArt } from "@/lib/coverartarchive/client";
 import { getFreshReleases, type FreshRelease } from "@/lib/listenbrainz/client";
 import type { PlayItem } from "@/services/play-providers/types";
@@ -45,6 +45,34 @@ function shuffle<T>(arr: T[]): T[] {
   return [...arr].sort(() => Math.random() - 0.5);
 }
 
+export type ArtistLookup = { id: string; name: string; disambiguation: string | null; wikidataQid: string | null };
+
+function extractWikidataQid(relations: { type?: string; url?: { resource?: string } }[] | undefined): string | null {
+  for (const rel of relations ?? []) {
+    const resource = rel.url?.resource ?? "";
+    const match = resource.match(/wikidata\.org\/wiki\/(Q\d+)/);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+/**
+ * Step 4 of the preferred artist flow: MusicBrainz artist *lookup* by
+ * MBID (never search) -- canonical name/disambiguation, with its
+ * Wikidata relation resolved in the very same request so the
+ * ListenBrainz-primary path never needs two MusicBrainz calls for one
+ * artist. Also used standalone by /api/play/diagnostics'
+ * `musicbrainz.artist_lookup` check.
+ */
+export async function lookupArtist(mbid: string): Promise<ArtistLookup | null> {
+  const data = await mbGet<{ name?: string; disambiguation?: string; relations?: { type?: string; url?: { resource?: string } }[] }>(
+    `/artist/${mbid}?inc=url-rels`,
+    60 * 60 * 24 * 7
+  );
+  if (!data.name) return null;
+  return { id: mbid, name: data.name, disambiguation: data.disambiguation || null, wikidataQid: extractWikidataQid(data.relations) };
+}
+
 type MbArtist = { id: string; name: string; disambiguation?: string };
 type MbReleaseGroup = { id: string; title: string; "artist-credit"?: { name: string }[] };
 type MbRecording = {
@@ -80,11 +108,30 @@ async function artistsFromListenBrainz(
   const chosen = shuffle(candidates).slice(0, count);
   const items = await Promise.all(
     chosen.map(async (a) => {
-      const imageUrl = await getArtistImageViaWikidata(a.mbid);
+      // Preferred flow: ListenBrainz already gave a real MBID, so go
+      // straight to a MusicBrainz *lookup* (step 4) -- never a search --
+      // for canonical metadata + its Wikidata relation in one request,
+      // then resolve the Wikimedia image from that (steps 5-6). If the
+      // lookup itself fails, keep ListenBrainz's own artist name and
+      // just skip the image rather than losing the round.
+      let title = a.name;
+      let disambiguation: string | null = null;
+      let imageUrl: string | null = null;
+      try {
+        const lookup = await lookupArtist(a.mbid);
+        if (lookup) {
+          title = lookup.name;
+          disambiguation = lookup.disambiguation;
+          if (lookup.wikidataQid) imageUrl = await getWikimediaImageForQid(lookup.wikidataQid).catch(() => null);
+        }
+      } catch {
+        // MusicBrainz lookup failed/rate-limited -- fine, we still have a real artist name from ListenBrainz.
+      }
       return {
         id: a.mbid,
         type: "artist" as const,
-        title: a.name,
+        title,
+        subtitle: disambiguation,
         imageUrl,
         source: "musicbrainz",
         discoverySource: "listenbrainz",

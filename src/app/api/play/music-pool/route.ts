@@ -34,29 +34,23 @@ async function fetchByKind(kind: Kind, count: number, exclude: Set<string>): Pro
   return getTrackPlayItems(count, exclude);
 }
 
-export type MusicPoolResponse = PlayPool & {
-  /** Surfaced for the diagnostics route / manual inspection -- never
-   * hidden behind a plain "it worked" response. */
+/** Server-side only -- verification-era logging of the real fallback
+ * chain (requested kind/count, provider actually used, live vs.
+ * fallback counts, duration, failure reasons). Visible in server/
+ * function logs, never in the client-facing response. */
+function logMusicPoolRequest(entry: {
+  requestedKind: Kind;
+  requestedCount: number;
+  providerUsed: string;
+  fallbackReason: string | null;
+  liveItemCount: number;
+  fallbackItemCount: number;
   listenBrainzFailed: boolean;
   musicBrainzFailed: boolean;
-  /**
-   * TEMPORARY, testing-phase only: verbose per-request breakdown so we
-   * can watch the real fallback chain in action against production.
-   * Game components never read this (they only destructure `.items`),
-   * so it's inert in the normal UI -- remove once the live provider is
-   * proven reliable and no longer needed for verification.
-   */
-  debug: {
-    requestedKind: Kind;
-    requestedCount: number;
-    primaryProviderAttempted: "listenbrainz+musicbrainz";
-    providerUsed: string;
-    fallbackReason: string | null;
-    liveItemCount: number;
-    fallbackItemCount: number;
-    durationMs: number;
-  };
-};
+  durationMs: number;
+}) {
+  console.log("[play/music-pool]", JSON.stringify(entry));
+}
 
 export async function GET(req: NextRequest) {
   const start = Date.now();
@@ -66,25 +60,7 @@ export async function GET(req: NextRequest) {
   const spaceId = params.get("spaceId");
 
   if (!kind || !["artist", "album", "track"].includes(kind) || !spaceId) {
-    return NextResponse.json(
-      {
-        items: [],
-        provider: "none",
-        listenBrainzFailed: false,
-        musicBrainzFailed: false,
-        debug: {
-          requestedKind: (kind ?? "artist") as Kind,
-          requestedCount: count,
-          primaryProviderAttempted: "listenbrainz+musicbrainz",
-          providerUsed: "none",
-          fallbackReason: "missing kind/spaceId",
-          liveItemCount: 0,
-          fallbackItemCount: 0,
-          durationMs: Date.now() - start,
-        },
-      } satisfies MusicPoolResponse,
-      { status: 400 }
-    );
+    return NextResponse.json({ items: [], provider: "none" } satisfies PlayPool, { status: 400 });
   }
 
   const exclude = await getRecentlyUsedIds(spaceId, MUSIC_CATEGORY[kind]).catch(() => new Set<string>());
@@ -124,20 +100,17 @@ export async function GET(req: NextRequest) {
           ? "musicbrainz failed/errored after listenbrainz topped up"
           : `live providers only returned ${liveItemCount}/${count} usable items`;
 
-  return NextResponse.json({
-    items,
-    provider,
+  logMusicPoolRequest({
+    requestedKind: kind,
+    requestedCount: count,
+    providerUsed: provider,
+    fallbackReason,
+    liveItemCount,
+    fallbackItemCount,
     listenBrainzFailed,
     musicBrainzFailed,
-    debug: {
-      requestedKind: kind,
-      requestedCount: count,
-      primaryProviderAttempted: "listenbrainz+musicbrainz",
-      providerUsed: provider,
-      fallbackReason,
-      liveItemCount,
-      fallbackItemCount,
-      durationMs: Date.now() - start,
-    },
-  } satisfies MusicPoolResponse);
+    durationMs: Date.now() - start,
+  });
+
+  return NextResponse.json({ items, provider } satisfies PlayPool);
 }

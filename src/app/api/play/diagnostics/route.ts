@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getSessionContext } from "@/services/session";
 import { getFreshReleases, type FreshRelease } from "@/lib/listenbrainz/client";
 import { mbGet, MusicBrainzHttpError } from "@/lib/musicbrainz/client";
 import { lookupArtist, type ArtistLookup } from "@/services/play-providers/musicbrainz";
@@ -53,8 +54,21 @@ function skipped(step: string, reason: string): Step {
  * reason) rather than being silently omitted when an earlier stage
  * failed. No secrets involved -- everything this stack calls is
  * public/keyless.
+ *
+ * Restricted now that verification is done: allowed in local
+ * development unconditionally (nothing sensitive to protect there), or
+ * in production only for a signed-in Keeps user (there are only ever
+ * two, both effectively admins of their own private space) -- a 404
+ * rather than 401/403 so its existence isn't advertised to anyone else.
  */
 export async function GET() {
+  if (process.env.NODE_ENV === "production") {
+    const ctx = await getSessionContext();
+    if (!ctx) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+  }
+
   const steps: Step[] = [];
 
   // 1. listenbrainz.fresh_releases

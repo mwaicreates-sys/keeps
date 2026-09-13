@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { X as XIcon, EyeOff, RotateCcw } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
 import { createGameSession, submitGameAnswer } from "@/services/games-client";
 import { getGameSession } from "@/services/games-read-client";
-import { fetchMusicPool } from "@/services/music-pool-client";
+import { fetchMusicPoolPrimed, prefetchMusicPool } from "@/services/music-pool-client";
 import { MUSIC_CATEGORY } from "@/lib/play-music-categories";
 import { BLIND_RANK_PACK, randomFrom } from "@/lib/game-prompts";
 import { getErrorMessage, timeAgo } from "@/lib/utils";
@@ -36,16 +36,23 @@ export function BlindRankGame({ sessions }: { sessions: GameSessionRow[] }) {
   const [submitting, setSubmitting] = useState(false);
   const [starting, setStarting] = useState(false);
 
+  useEffect(() => {
+    prefetchMusicPool("album", ROUND_SIZE, space.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function startNew() {
     setStarting(true);
     try {
       let prompt: Prompt;
       let topic: string;
 
-      const useMusic = Math.random() < 0.5;
-      const pool = useMusic ? await fetchMusicPool("album", ROUND_SIZE, space.id) : null;
+      // Dynamic provider content is primary now -- every round tries a
+      // real 5-album set first, dropping to the hardcoded pack only when
+      // the pool comes up short.
+      const pool = await fetchMusicPoolPrimed("album", ROUND_SIZE, space.id);
 
-      if (pool && pool.items.length === ROUND_SIZE) {
+      if (pool.items.length === ROUND_SIZE) {
         const items = pool.items.map((i) => i.title);
         prompt = {
           items,
@@ -70,6 +77,7 @@ export function BlindRankGame({ sessions }: { sessions: GameSessionRow[] }) {
       });
       setActive({ ...session, game_answers: [], game_results: null } as GameSessionRow);
       setOrder([]);
+      prefetchMusicPool("album", ROUND_SIZE, space.id);
       router.refresh();
     } catch (err) {
       show(getErrorMessage(err, "Couldn't start a new round."), "error");

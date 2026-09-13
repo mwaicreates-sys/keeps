@@ -6,24 +6,22 @@ import type { PlayItem } from "@/services/play-providers/types";
 
 /**
  * The music content flow, per provider role:
- *   CURRENT/DISCOVERY -> ListenBrainz (fresh-releases)
+ *   CURRENT/DISCOVERY -> ListenBrainz (fresh-releases) -- PRIMARY
  *   METADATA           -> MusicBrainz
  *   ALBUM ART          -> Cover Art Archive
  *   ARTIST IMAGES      -> Wikidata / Wikimedia
  *
  * Every getter tries ListenBrainz's fresh-releases feed first (real
- * current content); when that doesn't have enough (rate-limited, or
- * genuinely short today), it tops up with a MusicBrainz tag-seeded
- * search. Both paths resolve through the same art/image clients, so
- * every returned PlayItem's `source`/`discoverySource`/`imageSource`
- * honestly reflects which one actually produced it.
+ * current content, MBIDs already in hand -- no search needed); a
+ * MusicBrainz tag-seeded *search* only runs as a fallback when
+ * ListenBrainz didn't surface enough distinct, usable items. Both paths
+ * resolve through the same art/image clients, so every returned
+ * PlayItem's `source`/`discoverySource`/`imageSource` honestly reflects
+ * which one actually produced it.
  *
  * Every getter also returns whether ListenBrainz/MusicBrainz genuinely
  * *failed* (errored/rate-limited), as opposed to just "had nothing to
- * offer" -- this is reported through, never swallowed silently, so
- * /api/play/music-pool and the diagnostics route can tell the two apart
- * even though gameplay itself still gets a graceful, filled pool either
- * way.
+ * offer" -- reported through, never swallowed silently.
  */
 export type MusicFetchResult = {
   items: PlayItem[];
@@ -43,6 +41,39 @@ function randomSeed(): string {
 
 function shuffle<T>(arr: T[]): T[] {
   return [...arr].sort(() => Math.random() - 0.5);
+}
+
+// Pseudo-artist/compilation credits that make bad game content -- "who
+// are you keeping, Various Artists or Unknown Artist?" isn't a real
+// choice. Filtered out wherever an artist name is seen, from either
+// ListenBrainz or MusicBrainz search.
+const UNUSABLE_ARTIST_NAMES = new Set([
+  "various artists",
+  "various",
+  "unknown artist",
+  "unknown",
+  "[unknown]",
+  "n/a",
+  "not applicable",
+  "traditional",
+  "[data deleted]",
+  "[no artist]",
+]);
+
+function isUsableArtistName(name: string | null | undefined): boolean {
+  if (!name) return false;
+  const normalized = name.trim().toLowerCase();
+  return normalized.length > 0 && !UNUSABLE_ARTIST_NAMES.has(normalized);
+}
+
+// Generic compilation titles ("Greatest Hits", "Best Of ...") are real
+// MusicBrainz content but poor game content -- everyone has a "Greatest
+// Hits". Only filtered from the *search* fallback; ListenBrainz's fresh
+// releases are real new albums and don't need this.
+const GENERIC_ALBUM_TITLE_PATTERNS = [/^greatest hits$/i, /^the best of/i, /^best of /i, /^collection$/i, /^anthology$/i];
+
+function isGenericAlbumTitle(title: string): boolean {
+  return GENERIC_ALBUM_TITLE_PATTERNS.some((re) => re.test(title.trim()));
 }
 
 export type ArtistLookup = { id: string; name: string; disambiguation: string | null; wikidataQid: string | null };
@@ -100,14 +131,21 @@ async function artistsFromListenBrainz(
   for (const r of releases) {
     const mbid = r.artist_mbids?.[0];
     const name = r.artist_credit_name;
-    if (!mbid || !name || exclude.has(mbid) || seen.has(mbid)) continue;
+    if (!mbid || !isUsableArtistName(name) || exclude.has(mbid) || seen.has(mbid)) continue;
     seen.add(mbid);
-    candidates.push({ name, mbid });
+    candidates.push({ name: name!, mbid });
   }
 
-  const chosen = shuffle(candidates).slice(0, count);
-  const items = await Promise.all(
-    chosen.map(async (a) => {
+  // Bounded over-fetch (not unlimited -- each candidate costs one
+  // rate-limited MusicBrainz lookup) so we have room to prefer
+  // candidates whose image actually resolved, per the image-first rule,
+  // without the round waiting on more MusicBrainz round trips than
+  // necessary.
+  const shuffled = shuffle(candidates);
+  const attempted = shuffled.slice(0, Math.min(shuffled.length, count + 2));
+
+  const resolved = await Promise.all(
+    attempted.map(async (a) => {
       // Preferred flow: ListenBrainz already gave a real MBID, so go
       // straight to a MusicBrainz *lookup* (step 4) -- never a search --
       // for canonical metadata + its Wikidata relation in one request,
@@ -119,7 +157,7 @@ async function artistsFromListenBrainz(
       let imageUrl: string | null = null;
       try {
         const lookup = await lookupArtist(a.mbid);
-        if (lookup) {
+        if (lookup && isUsableArtistName(lookup.name)) {
           title = lookup.name;
           disambiguation = lookup.disambiguation;
           if (lookup.wikidataQid) imageUrl = await getWikimediaImageForQid(lookup.wikidataQid).catch(() => null);
@@ -140,7 +178,12 @@ async function artistsFromListenBrainz(
       };
     })
   );
-  return { items, failed };
+
+  // Image-first: prefer resolved candidates that actually have a photo,
+  // only falling back to photo-less ones to still fill the round.
+  const withImages = resolved.filter((i) => i.imageUrl);
+  const withoutImages = resolved.filter((i) => !i.imageUrl);
+  return { items: [...withImages, ...withoutImages].slice(0, count), failed };
 }
 
 export async function getArtistPlayItems(count: number, exclude: Set<string> = new Set()): Promise<MusicFetchResult> {
@@ -149,15 +192,19 @@ export async function getArtistPlayItems(count: number, exclude: Set<string> = n
     return { items: fromListenBrainz.items.slice(0, count), listenBrainzFailed: fromListenBrainz.failed, musicBrainzFailed: false };
   }
 
+  // Fallback only -- ListenBrainz didn't surface enough usable, distinct
+  // artists. Never the primary discovery mechanism.
   const remaining = count - fromListenBrainz.items.length;
   try {
     const seed = randomSeed();
     const data = await mbGet<{ artists?: MbArtist[] }>(
-      `/artist?query=${encodeURIComponent(`tag:${seed}`)}&limit=${Math.min(25, remaining * 4)}`,
+      `/artist?query=${encodeURIComponent(`tag:${seed}`)}&limit=${Math.min(25, remaining * 6)}`,
       60 * 60 * 6
     );
     const alreadyIds = new Set([...exclude, ...fromListenBrainz.items.map((i) => i.id)]);
-    const artists = (data.artists ?? []).filter((a) => !alreadyIds.has(a.id)).slice(0, remaining);
+    const artists = (data.artists ?? [])
+      .filter((a) => !alreadyIds.has(a.id) && isUsableArtistName(a.name))
+      .slice(0, remaining);
     const extra = await Promise.all(
       artists.map(async (a) => {
         const imageUrl = await getArtistImageViaWikidata(a.id);
@@ -190,17 +237,22 @@ async function albumsFromListenBrainz(
   for (const r of releases) {
     const rgMbid = r.release_group_mbid;
     if (!rgMbid || !r.release_name || exclude.has(rgMbid) || seen.has(rgMbid)) continue;
+    if (r.artist_credit_name && !isUsableArtistName(r.artist_credit_name)) continue; // skip "Various Artists" compilations
     seen.add(rgMbid);
     candidates.push(r);
   }
 
-  const items: PlayItem[] = [];
+  // Cover Art Archive lookups aren't MusicBrainz-rate-limited, so we can
+  // afford to walk further into the shuffled list in search of real art
+  // (image-first) before giving up and filling with art-less picks.
+  const withImages: PlayItem[] = [];
+  const withoutImages: PlayItem[] = [];
   for (const r of shuffle(candidates)) {
-    if (items.length >= count) break;
+    if (withImages.length >= count) break;
     const imageUrl = await getReleaseGroupCoverArt(r.release_group_mbid!);
-    items.push({
+    const item = {
       id: r.release_group_mbid!,
-      type: "album",
+      type: "album" as const,
       title: r.release_name!,
       subtitle: r.artist_credit_name ?? null,
       imageUrl,
@@ -208,9 +260,11 @@ async function albumsFromListenBrainz(
       discoverySource: "listenbrainz",
       imageSource: imageUrl ? "coverartarchive" : null,
       sourceUrl: `https://musicbrainz.org/release-group/${r.release_group_mbid}`,
-    });
+    };
+    if (imageUrl) withImages.push(item);
+    else if (withoutImages.length < count) withoutImages.push(item);
   }
-  return { items, failed };
+  return { items: [...withImages, ...withoutImages].slice(0, count), failed };
 }
 
 export async function getAlbumPlayItems(count: number, exclude: Set<string> = new Set()): Promise<MusicFetchResult> {
@@ -223,11 +277,17 @@ export async function getAlbumPlayItems(count: number, exclude: Set<string> = ne
   try {
     const seed = randomSeed();
     const data = await mbGet<{ "release-groups"?: MbReleaseGroup[] }>(
-      `/release-group?query=${encodeURIComponent(`tag:${seed} AND primarytype:album`)}&limit=${Math.min(25, remaining * 4)}`,
+      `/release-group?query=${encodeURIComponent(`tag:${seed} AND primarytype:album`)}&limit=${Math.min(25, remaining * 6)}`,
       60 * 60 * 6
     );
     const alreadyIds = new Set([...exclude, ...fromListenBrainz.items.map((i) => i.id)]);
-    const groups = (data["release-groups"] ?? []).filter((rg) => !alreadyIds.has(rg.id)).slice(0, remaining);
+    const groups = (data["release-groups"] ?? [])
+      .filter((rg) => {
+        if (alreadyIds.has(rg.id) || isGenericAlbumTitle(rg.title)) return false;
+        const artistName = rg["artist-credit"]?.map((c) => c.name).join(", ");
+        return !artistName || isUsableArtistName(artistName);
+      })
+      .slice(0, remaining);
     const extra = await Promise.all(
       groups.map(async (rg) => {
         const imageUrl = await getReleaseGroupCoverArt(rg.id);
@@ -258,10 +318,16 @@ export async function getTrackPlayItems(count: number, exclude: Set<string> = ne
   try {
     const seed = randomSeed();
     const data = await mbGet<{ recordings?: MbRecording[] }>(
-      `/recording?query=${encodeURIComponent(`tag:${seed}`)}&limit=${Math.min(25, count * 4)}`,
+      `/recording?query=${encodeURIComponent(`tag:${seed}`)}&limit=${Math.min(25, count * 6)}`,
       60 * 60 * 6
     );
-    const recordings = (data.recordings ?? []).filter((r) => !exclude.has(r.id) && r.releases?.length).slice(0, count);
+    const recordings = (data.recordings ?? [])
+      .filter((r) => {
+        if (exclude.has(r.id) || !r.releases?.length) return false;
+        const artistName = r["artist-credit"]?.map((c) => c.name).join(", ");
+        return !artistName || isUsableArtistName(artistName);
+      })
+      .slice(0, count);
 
     const items = await Promise.all(
       recordings.map(async (rec) => {

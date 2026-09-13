@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, X as XIcon, HelpCircle } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
 import { createGameSession, submitGameAnswer, type GameType } from "@/services/games-client";
 import { getGameSession } from "@/services/games-read-client";
-import { fetchMusicPool } from "@/services/music-pool-client";
+import { fetchMusicPoolPrimed, prefetchMusicPool } from "@/services/music-pool-client";
 import { MUSIC_CATEGORY } from "@/lib/play-music-categories";
 import { THIS_OR_THAT_PACK, GUESS_MINE_PACK, randomFrom } from "@/lib/game-prompts";
 import { getErrorMessage, timeAgo } from "@/lib/utils";
@@ -34,24 +34,23 @@ async function pickPrompt(
   gameType: "this_or_that" | "guess_mine",
   spaceId: string
 ): Promise<Prompt> {
-  // This or That / Guess Mine both get a real, image-first music
-  // matchup part of the time -- mixed in with the existing hardcoded
-  // categories rather than replacing them, so the game still covers
-  // movies/football/food/etc.
-  if (Math.random() < 0.5) {
-    const pool = await fetchMusicPool("artist", 2, spaceId);
-    if (pool.items.length === 2) {
-      const [a, b] = pool.items;
-      return {
-        topic: `${a.title} or ${b.title}`,
-        category: MUSIC_CATEGORY.artist,
-        optionA: a.title,
-        optionB: b.title,
-        imageA: a.imageUrl,
-        imageB: b.imageUrl,
-        items: pool.items.map((i) => ({ id: i.id, title: i.title })),
-      };
-    }
+  // Dynamic provider content is now the primary source for This or That
+  // / Guess Mine: every round tries a real, image-first artist matchup
+  // first. Only when the pool comes up short (live providers AND Keeps'
+  // own dropped songs both had nothing usable) does it drop to the
+  // hardcoded pack -- last resort, not a coin flip.
+  const pool = await fetchMusicPoolPrimed("artist", 2, spaceId);
+  if (pool.items.length === 2) {
+    const [a, b] = pool.items;
+    return {
+      topic: `${a.title} or ${b.title}`,
+      category: MUSIC_CATEGORY.artist,
+      optionA: a.title,
+      optionB: b.title,
+      imageA: a.imageUrl,
+      imageB: b.imageUrl,
+      items: pool.items.map((i) => ({ id: i.id, title: i.title })),
+    };
   }
 
   if (gameType === "guess_mine") {
@@ -91,6 +90,13 @@ export function ChoiceGame({
   const [submitting, setSubmitting] = useState(false);
   const [starting, setStarting] = useState(false);
 
+  // Warm the pool as soon as this game opens, so even the first tap of
+  // "Start" doesn't wait on a cold provider request.
+  useEffect(() => {
+    prefetchMusicPool("artist", 2, space.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function startNew() {
     setStarting(true);
     try {
@@ -106,6 +112,8 @@ export function ChoiceGame({
       });
       setActive({ ...session, game_answers: [], game_results: null } as GameSessionRow);
       setChoice(null);
+      // Prefetch the *next* round now, while this one's being played.
+      prefetchMusicPool("artist", 2, space.id);
       router.refresh();
     } catch (err) {
       show(getErrorMessage(err, "Couldn't start a new round."), "error");

@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { X as XIcon, Scissors, Check } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
 import { createGameSession, submitGameAnswer } from "@/services/games-client";
 import { getGameSession } from "@/services/games-read-client";
-import { fetchMusicPool } from "@/services/music-pool-client";
+import { fetchMusicPoolPrimed, prefetchMusicPool } from "@/services/music-pool-client";
 import { MUSIC_CATEGORY } from "@/lib/play-music-categories";
 import { KEEP3_DROP2_PACK, randomFrom } from "@/lib/game-prompts";
 import { getErrorMessage, timeAgo } from "@/lib/utils";
@@ -38,17 +38,28 @@ export function KeepDropGame({ sessions }: { sessions: GameSessionRow[] }) {
   const [submitting, setSubmitting] = useState(false);
   const [starting, setStarting] = useState(false);
 
+  function warmAllKinds() {
+    for (const k of MUSIC_KINDS) prefetchMusicPool(k, ROUND_SIZE, space.id);
+  }
+
+  useEffect(() => {
+    warmAllKinds();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function startNew() {
     setStarting(true);
     try {
       let prompt: Prompt;
       let topic: string;
 
-      const useMusic = Math.random() < 0.5;
-      const kind = useMusic ? MUSIC_KINDS[Math.floor(Math.random() * MUSIC_KINDS.length)] : null;
-      const pool = kind ? await fetchMusicPool(kind, ROUND_SIZE, space.id) : null;
+      // Dynamic provider content is primary now -- every round tries a
+      // real 5-item set first (kind picked at random for variety),
+      // dropping to the hardcoded pack only when the pool comes up short.
+      const kind = MUSIC_KINDS[Math.floor(Math.random() * MUSIC_KINDS.length)];
+      const pool = await fetchMusicPoolPrimed(kind, ROUND_SIZE, space.id);
 
-      if (pool && kind && pool.items.length === ROUND_SIZE) {
+      if (pool.items.length === ROUND_SIZE) {
         const items = pool.items.map((i) => i.title);
         prompt = {
           items,
@@ -73,6 +84,7 @@ export function KeepDropGame({ sessions }: { sessions: GameSessionRow[] }) {
       });
       setActive({ ...session, game_answers: [], game_results: null } as GameSessionRow);
       setKept([]);
+      warmAllKinds();
       router.refresh();
     } catch (err) {
       show(getErrorMessage(err, "Couldn't start a new round."), "error");

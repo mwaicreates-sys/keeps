@@ -66,12 +66,12 @@ export function StoryViewer({
           ))}
         </div>
 
-        <div className="absolute inset-x-3 top-7 z-10 flex items-center gap-2">
-          <Avatar name={story.author.display_name} url={story.author.avatar_url} size={30} />
-          <p className="text-sm font-medium text-white">{story.author.display_name}</p>
-          <p className="text-xs text-white/70">{timeAgo(story.created_at)}</p>
+        <div className="absolute inset-x-3 top-7 z-10 flex items-center gap-2.5">
+          <Avatar name={story.author.display_name} url={story.author.avatar_url} size={40} />
+          <p className="text-lg font-semibold text-white">{story.author.display_name}</p>
+          <p className="text-sm text-white/70">{timeAgo(story.created_at)}</p>
           <button onClick={onClose} className="ml-auto rounded-full p-1.5 text-white/80 hover:bg-white/10">
-            <X size={20} />
+            <X size={28} />
           </button>
         </div>
 

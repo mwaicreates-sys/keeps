@@ -44,6 +44,7 @@ export function TunePlay({
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchAbort = useRef<AbortController | null>(null);
 
   const selectedIds = new Set(selected.map((a) => a.mbid));
 
@@ -94,13 +95,18 @@ export function TunePlay({
   function onSearchChange(value: string) {
     setQuery(value);
     if (searchDebounce.current) clearTimeout(searchDebounce.current);
+    searchAbort.current?.abort(); // cancel whatever the previous keystroke started
     if (!value.trim()) {
       setSearchResults([]);
+      setSearching(false);
       return;
     }
     setSearching(true);
     searchDebounce.current = setTimeout(async () => {
-      const results = await searchTasteArtists(value);
+      const controller = new AbortController();
+      searchAbort.current = controller;
+      const results = await searchTasteArtists(value, controller.signal);
+      if (controller.signal.aborted) return; // a newer keystroke already superseded this request
       setSearchResults(results);
       setSearching(false);
     }, 350);
@@ -173,8 +179,12 @@ export function TunePlay({
           </div>
 
           <div className="mt-4 grid grid-cols-3 gap-2.5">
-            {displayedArtists.map((item) => {
+            {displayedArtists.map((item, i) => {
               const isSelected = selectedIds.has(item.id);
+              // First visible row (a 3-column grid) gets priority
+              // loading; the rest lazy -- per the perf pass, not every
+              // image should be marked high priority.
+              const isAboveFold = i < 6;
               return (
                 <button
                   key={item.id}
@@ -185,7 +195,13 @@ export function TunePlay({
                   <div className={`relative aspect-square w-full overflow-hidden rounded-2xl bg-[#f2efe9] ${isSelected ? "ring-[3px] ring-[#3a362f]" : ""}`}>
                     {item.imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={item.imageUrl} alt="" className="h-full w-full object-cover" />
+                      <img
+                        src={item.imageUrl}
+                        alt=""
+                        loading={isAboveFold ? "eager" : "lazy"}
+                        fetchPriority={isAboveFold ? "high" : "auto"}
+                        className="h-full w-full object-cover"
+                      />
                     ) : (
                       <div className="grid h-full w-full place-items-center text-[#a39d92]">
                         <Music2 size={20} />

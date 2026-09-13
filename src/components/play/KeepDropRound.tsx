@@ -9,6 +9,7 @@ import { createGameSession, submitGameAnswer, updateGameSessionPrompt } from "@/
 import { getGameSession } from "@/services/games-read-client";
 import { warmAllKeepDropKinds, pickKeepDropPrompt, swapKeepDropItem, KEEP_COUNT, type KeepDropPrompt } from "@/lib/keep-drop-prompt";
 import { recordPlaySignal, recordPlaySignalForItems } from "@/services/play-signals-client";
+import { usePollForResult } from "@/hooks/usePollForResult";
 import { playGame } from "@/lib/play-config";
 import { RoundHeader } from "@/components/play/RoundHeader";
 import { RoundTagline } from "@/components/play/RoundTagline";
@@ -42,6 +43,8 @@ export function KeepDropRound({ session: initialSession, roundNumber }: { sessio
   useEffect(() => {
     warmAllKeepDropKinds(space.id);
   }, [space.id]);
+
+  usePollForResult(session.id, answeredByMe && !result, (fresh) => setSession(fresh));
 
   function toggle(item: string) {
     setKept((prev) => {
@@ -204,7 +207,13 @@ export function KeepDropRound({ session: initialSession, roundNumber }: { sessio
                     <div className={`relative aspect-square w-full overflow-hidden rounded-[18px] bg-[#f2efe9] ${isKept ? "ring-[3px] ring-[#3a362f]" : ""}`}>
                       {image ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={image} alt="" className={`h-full w-full object-cover transition ${!isKept && kept.length >= KEEP_COUNT ? "opacity-50" : ""}`} />
+                        <img
+                          src={image}
+                          alt=""
+                          loading="eager"
+                          fetchPriority={i < 2 ? "high" : "auto"}
+                          className={`h-full w-full object-cover transition ${!isKept && kept.length >= KEEP_COUNT ? "opacity-50" : ""}`}
+                        />
                       ) : (
                         <div className="h-full w-full bg-black/10" />
                       )}

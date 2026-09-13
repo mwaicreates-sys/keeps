@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getTasteProfileServer } from "@/services/taste-profile-server";
 import { PlayGameCard } from "@/components/play/PlayGameCard";
 import { TuneNudgeBanner } from "@/components/play/TuneNudgeBanner";
+import { PlayHomePrefetch } from "@/components/play/PlayHomePrefetch";
 import {
   ThisOrThatPreview,
   Top5Preview,
@@ -35,6 +36,7 @@ export default async function PlayPage() {
 
   return (
     <div className="mx-auto w-full max-w-xl pb-4 md:max-w-2xl md:py-4">
+      <PlayHomePrefetch />
       <div className="flex items-start justify-between px-4 pb-4 pt-2">
         <div>
           <h1 className="text-[32px] font-bold leading-[1.1] tracking-tight text-[#3a362f]">Play</h1>

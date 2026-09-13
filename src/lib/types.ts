@@ -506,6 +506,39 @@ export type Database = {
           },
         ]
       }
+      play_content_cache: {
+        Row: {
+          expires_at: string
+          image_url: string | null
+          item_id: string
+          item_type: string
+          metadata: Json
+          subtitle: string | null
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          expires_at: string
+          image_url?: string | null
+          item_id: string
+          item_type: string
+          metadata?: Json
+          subtitle?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          expires_at?: string
+          image_url?: string | null
+          item_id?: string
+          item_type?: string
+          metadata?: Json
+          subtitle?: string | null
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       play_item_signals: {
         Row: {
           created_at: string

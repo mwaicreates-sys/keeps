@@ -21,6 +21,7 @@ export async function createGameSession(input: {
   category?: string;
   prompt: Record<string, unknown>;
 }) {
+  const start = performance.now();
   const supabase = createClient();
   const { data, error } = await supabase
     .from("game_sessions")
@@ -35,9 +36,13 @@ export async function createGameSession(input: {
     .select()
     .single();
   if (error) throw error;
+  console.log("[perf] session_creation", { gameType: input.gameType, ms: Math.round(performance.now() - start) });
 
+  // Fire-and-forget: the partner's notification doesn't need to block
+  // this player's navigation into the new round -- per the perf pass,
+  // "New round" should feel instant, not wait on a second DB write.
   if (input.otherMemberId) {
-    await notify({
+    void notify({
       spaceId: input.spaceId,
       userId: input.otherMemberId,
       type: "game_invite",
@@ -97,6 +102,7 @@ export async function submitGameAnswer(input: {
   gameType: GameType;
   topic: string;
 }) {
+  const start = performance.now();
   const supabase = createClient();
   const { error } = await supabase
     .from("game_answers")
@@ -105,24 +111,28 @@ export async function submitGameAnswer(input: {
       { onConflict: "session_id,user_id" }
     );
   if (error) throw error;
+  const answerSubmitMs = Math.round(performance.now() - start);
 
   const { data: answers } = await supabase
     .from("game_answers")
     .select("*")
     .eq("session_id", input.sessionId);
 
+  // Both answers are in: compute and store the result in this same
+  // request (never waiting for the reveal screen to open and fetch/
+  // compute it separately) -- pure local logic, no provider calls.
   if (answers && answers.length >= 2) {
+    const resultStart = performance.now();
     const result = computeResult(input.gameType, answers as { user_id: string; answer: unknown }[]);
     await supabase
       .from("game_results")
       .upsert({ session_id: input.sessionId, result: result as Json }, { onConflict: "session_id" });
-    await supabase
-      .from("game_sessions")
-      .update({ status: "completed", completed_at: new Date().toISOString() })
-      .eq("id", input.sessionId);
-
+    // Fire-and-forget: the session's status column is display-only
+    // (history list badge) and the notification is for the *other*
+    // player -- neither needs to block this player's own reveal.
+    void supabase.from("game_sessions").update({ status: "completed", completed_at: new Date().toISOString() }).eq("id", input.sessionId);
     if (input.otherMemberId) {
-      await notify({
+      void notify({
         spaceId: input.spaceId,
         userId: input.otherMemberId,
         type: "game_ready",
@@ -132,20 +142,26 @@ export async function submitGameAnswer(input: {
         data: { sessionId: input.sessionId, gameType: input.gameType },
       });
     }
-  } else if (input.otherMemberId) {
-    await supabase
-      .from("game_sessions")
-      .update({ status: "ready" })
-      .eq("id", input.sessionId);
-    await notify({
-      spaceId: input.spaceId,
-      userId: input.otherMemberId,
-      type: "game_answer",
-      category: "play",
-      title: `Your turn: ${gameLabel(input.gameType)}`,
-      body: input.topic,
-      data: { sessionId: input.sessionId, gameType: input.gameType },
+    console.log("[perf] answer_submission", {
+      gameType: input.gameType,
+      answerSubmitMs,
+      resultComputeMs: Math.round(performance.now() - resultStart),
+      final: true,
     });
+  } else {
+    console.log("[perf] answer_submission", { gameType: input.gameType, answerSubmitMs, final: false });
+    if (input.otherMemberId) {
+      void supabase.from("game_sessions").update({ status: "ready" }).eq("id", input.sessionId);
+      void notify({
+        spaceId: input.spaceId,
+        userId: input.otherMemberId,
+        type: "game_answer",
+        category: "play",
+        title: `Your turn: ${gameLabel(input.gameType)}`,
+        body: input.topic,
+        data: { sessionId: input.sessionId, gameType: input.gameType },
+      });
+    }
   }
 }
 

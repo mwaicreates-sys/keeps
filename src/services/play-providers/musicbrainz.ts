@@ -1,8 +1,14 @@
 import { mbGet } from "@/lib/musicbrainz/client";
-import { getArtistImageViaWikidata, getWikimediaImageForQid } from "@/lib/wikidata/client";
+import { getWikimediaImageForQid } from "@/lib/wikidata/client";
 import { getReleaseGroupCoverArt } from "@/lib/coverartarchive/client";
 import { getFreshReleases, type FreshRelease } from "@/lib/listenbrainz/client";
 import { rankByFamiliarity, pickSeedGenre, type FamiliarityProfile } from "@/services/play-providers/familiarity";
+import {
+  getCachedArtistVisual,
+  setCachedArtistVisual,
+  getCachedArtistIdByName,
+  setCachedArtistIdByName,
+} from "@/services/play-providers/content-cache";
 import type { PlayItem } from "@/services/play-providers/types";
 
 const NO_PROFILE: FamiliarityProfile = {
@@ -116,6 +122,47 @@ export async function lookupArtist(mbid: string): Promise<ArtistLookup | null> {
   return { id: mbid, name: data.name, disambiguation: data.disambiguation || null, wikidataQid: extractWikidataQid(data.relations) };
 }
 
+export type ArtistVisual = { name: string; disambiguation: string | null; imageUrl: string | null };
+
+/**
+ * The single entry point every artist-resolving path should use.
+ * Checks the persistent play_content_cache first -- on a hit, this
+ * returns in one fast DB read with *zero* MusicBrainz/Wikidata/
+ * Wikimedia calls (and so doesn't touch the rate-limited queue at
+ * all). Only on a miss does it walk the real MBID -> Wikidata ->
+ * Wikimedia chain, then writes the result back so every future
+ * request for this artist (any user, any space) is a cache hit.
+ */
+export async function resolveArtistVisual(mbid: string, knownName?: string): Promise<ArtistVisual | null> {
+  const cached = await getCachedArtistVisual(mbid);
+  if (cached !== undefined) {
+    console.log("[perf]", JSON.stringify({ label: "artist_visual", mbid, cache: "hit" }));
+    return cached;
+  }
+  console.log("[perf]", JSON.stringify({ label: "artist_visual", mbid, cache: "miss" }));
+
+  let name = knownName ?? null;
+  let disambiguation: string | null = null;
+  let imageUrl: string | null = null;
+  try {
+    const lookup = await lookupArtist(mbid);
+    if (lookup && isUsableArtistName(lookup.name)) {
+      name = lookup.name;
+      disambiguation = lookup.disambiguation;
+      if (lookup.wikidataQid) imageUrl = await getWikimediaImageForQid(lookup.wikidataQid).catch(() => null);
+    }
+  } catch {
+    // MusicBrainz lookup failed/rate-limited -- fall back to whatever
+    // name the caller already had (e.g. from ListenBrainz or search)
+    // rather than losing the item entirely.
+  }
+  if (!name) return null;
+
+  const visual: ArtistVisual = { name, disambiguation, imageUrl };
+  await setCachedArtistVisual(mbid, visual);
+  return visual;
+}
+
 /** Real MusicBrainz folksonomy tags for one artist -- the closest thing
  * MusicBrainz has to a "genre," and the mechanism "Tune your Play" uses
  * to adapt suggestions toward what a user just picked (e.g. picking SZA
@@ -177,34 +224,20 @@ async function artistsFromListenBrainz(
 
   const resolved = await Promise.all(
     attempted.map(async (a) => {
-      // Preferred flow: ListenBrainz already gave a real MBID, so go
-      // straight to a MusicBrainz *lookup* (step 4) -- never a search --
-      // for canonical metadata + its Wikidata relation in one request,
-      // then resolve the Wikimedia image from that (steps 5-6). If the
-      // lookup itself fails, keep ListenBrainz's own artist name and
-      // just skip the image rather than losing the round.
-      let title = a.name;
-      let disambiguation: string | null = null;
-      let imageUrl: string | null = null;
-      try {
-        const lookup = await lookupArtist(a.mbid);
-        if (lookup && isUsableArtistName(lookup.name)) {
-          title = lookup.name;
-          disambiguation = lookup.disambiguation;
-          if (lookup.wikidataQid) imageUrl = await getWikimediaImageForQid(lookup.wikidataQid).catch(() => null);
-        }
-      } catch {
-        // MusicBrainz lookup failed/rate-limited -- fine, we still have a real artist name from ListenBrainz.
-      }
+      // Preferred flow: ListenBrainz already gave a real MBID, so
+      // resolveArtistVisual either serves a cached identity+image in
+      // one DB read, or -- on a miss -- does the MusicBrainz lookup ->
+      // Wikidata -> Wikimedia chain once and caches it for next time.
+      const visual = await resolveArtistVisual(a.mbid, a.name);
       return {
         id: a.mbid,
         type: "artist" as const,
-        title,
-        subtitle: disambiguation,
-        imageUrl,
+        title: visual?.name ?? a.name,
+        subtitle: visual?.disambiguation ?? null,
+        imageUrl: visual?.imageUrl ?? null,
         source: "musicbrainz",
         discoverySource: "listenbrainz",
-        imageSource: imageUrl ? "wikimedia" : null,
+        imageSource: visual?.imageUrl ? "wikimedia" : null,
         sourceUrl: `https://musicbrainz.org/artist/${a.mbid}`,
       };
     })
@@ -234,24 +267,19 @@ async function anchoredArtistItems(profile: FamiliarityProfile, count: number, e
   if (candidates.length === 0) return [];
   const resolved = await Promise.all(
     candidates.map(async (mbid) => {
-      try {
-        const lookup = await lookupArtist(mbid);
-        if (!lookup || !isUsableArtistName(lookup.name)) return null;
-        const imageUrl = lookup.wikidataQid ? await getWikimediaImageForQid(lookup.wikidataQid).catch(() => null) : null;
-        return {
-          id: mbid,
-          type: "artist" as const,
-          title: lookup.name,
-          subtitle: lookup.disambiguation,
-          imageUrl,
-          source: "musicbrainz",
-          discoverySource: "taste_seed",
-          imageSource: imageUrl ? "wikimedia" : null,
-          sourceUrl: `https://musicbrainz.org/artist/${mbid}`,
-        };
-      } catch {
-        return null;
-      }
+      const visual = await resolveArtistVisual(mbid);
+      if (!visual || !isUsableArtistName(visual.name)) return null;
+      return {
+        id: mbid,
+        type: "artist" as const,
+        title: visual.name,
+        subtitle: visual.disambiguation,
+        imageUrl: visual.imageUrl,
+        source: "musicbrainz",
+        discoverySource: "taste_seed",
+        imageSource: visual.imageUrl ? "wikimedia" : null,
+        sourceUrl: `https://musicbrainz.org/artist/${mbid}`,
+      };
     })
   );
   return resolved.filter((i): i is NonNullable<typeof i> => i !== null);
@@ -298,7 +326,13 @@ export async function getArtistPlayItems(
     ).map((ranked) => candidates.find((a) => a.id === ranked.id)!);
     const extra = await Promise.all(
       artists.map(async (a) => {
-        const imageUrl = await getArtistImageViaWikidata(a.id);
+        // Name/disambiguation already came from this search result --
+        // resolveArtistVisual still checks the cache first for the
+        // image (and backfills the cache with this known name if it
+        // has to resolve fresh), so a repeat appearance of this artist
+        // is a cache hit next time regardless of which path found it.
+        const visual = await resolveArtistVisual(a.id, a.name);
+        const imageUrl = visual?.imageUrl ?? null;
         return {
           id: a.id,
           type: "artist" as const,
@@ -527,31 +561,45 @@ export async function getTrackPlayItems(
  */
 export async function searchArtistsByTag(tag: string, count: number, exclude: Set<string> = new Set()): Promise<PlayItem[]> {
   try {
+    // Overfetch: some candidates won't have a usable image, and we'd
+    // rather quietly skip those than hand the UI a blank card (see
+    // resolveVisualBatch below).
+    const overfetchCount = Math.min(25, count * 3);
     const data = await mbGet<{ artists?: MbArtist[] }>(
-      `/artist?query=${encodeURIComponent(`tag:"${tag}"`)}&limit=${Math.min(25, count * 3)}`,
+      `/artist?query=${encodeURIComponent(`tag:"${tag}"`)}&limit=${overfetchCount}`,
       60 * 60 * 6
     );
-    const candidates = (data.artists ?? []).filter((a) => !exclude.has(a.id) && isUsableArtistName(a.name)).slice(0, count);
-    const items = await Promise.all(
-      candidates.map(async (a) => {
-        const imageUrl = await getArtistImageViaWikidata(a.id);
-        return {
-          id: a.id,
-          type: "artist" as const,
-          title: a.name,
-          subtitle: a.disambiguation ?? null,
-          imageUrl,
-          source: "musicbrainz",
-          discoverySource: "musicbrainz",
-          imageSource: imageUrl ? "wikimedia" : null,
-          sourceUrl: `https://musicbrainz.org/artist/${a.id}`,
-        };
-      })
-    );
-    return items;
+    const candidates = (data.artists ?? []).filter((a) => !exclude.has(a.id) && isUsableArtistName(a.name));
+    return resolveVisualBatch(candidates, count, "musicbrainz");
   } catch {
     return [];
   }
+}
+
+/** Resolves a batch of MusicBrainz artist search hits into visual
+ * PlayItems, in parallel, keeping only ones with a real image and
+ * stopping once `count` usable ones are found -- the "overfetch, then
+ * keep only what actually has a picture" rule from the performance
+ * pass, shared by every artist-search-shaped caller (Tune search,
+ * Tune suggestions-by-tag). */
+async function resolveVisualBatch(candidates: MbArtist[], count: number, discoverySource: string): Promise<PlayItem[]> {
+  const resolved = await Promise.all(
+    candidates.map(async (a) => {
+      const visual = await resolveArtistVisual(a.id, a.name);
+      return {
+        id: a.id,
+        type: "artist" as const,
+        title: visual?.name ?? a.name,
+        subtitle: visual?.disambiguation ?? a.disambiguation ?? null,
+        imageUrl: visual?.imageUrl ?? null,
+        source: "musicbrainz",
+        discoverySource,
+        imageSource: visual?.imageUrl ? "wikimedia" : null,
+        sourceUrl: `https://musicbrainz.org/artist/${a.id}`,
+      };
+    })
+  );
+  return resolved.filter((i) => i.imageUrl).slice(0, count);
 }
 
 /**
@@ -564,24 +612,55 @@ export async function searchArtistsByTag(tag: string, count: number, exclude: Se
 export async function searchArtists(query: string, count = 8): Promise<PlayItem[]> {
   const trimmed = query.trim();
   if (!trimmed) return [];
+
+  // Exact-name, single-result lookups (Tune's cold-start suggestions
+  // re-searching the same curated names) skip MusicBrainz entirely on
+  // a cache hit -- no search call, no queue wait at all.
+  if (count === 1) {
+    const cachedId = await getCachedArtistIdByName(trimmed);
+    if (cachedId) {
+      const visual = await resolveArtistVisual(cachedId);
+      if (visual) {
+        return [
+          {
+            id: cachedId,
+            type: "artist",
+            title: visual.name,
+            subtitle: visual.disambiguation,
+            imageUrl: visual.imageUrl,
+            source: "musicbrainz",
+            discoverySource: "musicbrainz",
+            imageSource: visual.imageUrl ? "wikimedia" : null,
+            sourceUrl: `https://musicbrainz.org/artist/${cachedId}`,
+          },
+        ];
+      }
+    }
+  }
+
   try {
     const data = await mbGet<{ artists?: MbArtist[] }>(
       `/artist?query=${encodeURIComponent(`artist:"${trimmed}"`)}&limit=${Math.min(20, count * 2)}`,
       60 * 60 * 24
     );
     const candidates = (data.artists ?? []).filter((a) => isUsableArtistName(a.name)).slice(0, count);
+    if (count === 1 && candidates[0]) await setCachedArtistIdByName(trimmed, candidates[0].id);
+    // Deliberately not image-filtered here (unlike resolveVisualBatch):
+    // this also backs the plain search box, where a user typing an
+    // exact name expects to find that artist even if Wikidata happens
+    // to have no photo for them, not have it silently disappear.
     const items = await Promise.all(
       candidates.map(async (a) => {
-        const imageUrl = await getArtistImageViaWikidata(a.id);
+        const visual = await resolveArtistVisual(a.id, a.name);
         return {
           id: a.id,
           type: "artist" as const,
-          title: a.name,
-          subtitle: a.disambiguation ?? null,
-          imageUrl,
+          title: visual?.name ?? a.name,
+          subtitle: visual?.disambiguation ?? a.disambiguation ?? null,
+          imageUrl: visual?.imageUrl ?? null,
           source: "musicbrainz",
           discoverySource: "musicbrainz",
-          imageSource: imageUrl ? "wikimedia" : null,
+          imageSource: visual?.imageUrl ? "wikimedia" : null,
           sourceUrl: `https://musicbrainz.org/artist/${a.id}`,
         };
       })

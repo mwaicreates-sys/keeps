@@ -10,6 +10,7 @@ import { getGameSession } from "@/services/games-read-client";
 import { prefetchMusicPool } from "@/services/music-pool-client";
 import { pickBlindRankPrompt, swapBlindRankItem, BLIND_RANK_ROUND_SIZE, type BlindRankPrompt } from "@/lib/blind-rank-prompt";
 import { recordPlaySignal, recordPlaySignalForItems } from "@/services/play-signals-client";
+import { usePollForResult } from "@/hooks/usePollForResult";
 import { playGame } from "@/lib/play-config";
 import { RoundHeader } from "@/components/play/RoundHeader";
 import { RoundTagline } from "@/components/play/RoundTagline";
@@ -41,6 +42,8 @@ export function BlindRankRound({ session: initialSession, roundNumber }: { sessi
   useEffect(() => {
     prefetchMusicPool("album", BLIND_RANK_ROUND_SIZE, space.id);
   }, [space.id]);
+
+  usePollForResult(session.id, answeredByMe && !result, (fresh) => setSession(fresh));
 
   function tapItem(item: string) {
     setOrder((prev) => (prev.includes(item) ? prev.filter((i) => i !== item) : [...prev, item]));
@@ -264,7 +267,10 @@ function ItemThumb({ imageUrl }: { imageUrl: string | null }) {
     return <div className="h-11 w-11 shrink-0 rounded-xl bg-black/10" />;
   }
   return (
+    // A short 5-item list, effectively all visible at once -- eager
+    // for every thumbnail rather than lazy, so scrolling never exposes
+    // a blank one.
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={imageUrl} alt="" className="h-11 w-11 shrink-0 rounded-xl object-cover" />
+    <img src={imageUrl} alt="" loading="eager" className="h-11 w-11 shrink-0 rounded-xl object-cover" />
   );
 }

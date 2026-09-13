@@ -4,10 +4,13 @@ import type { TasteArtist } from "@/lib/play-taste";
 import type { PlayItem } from "@/services/play-providers/types";
 
 /** Fast, visual artist search for "Tune your Play" -- always resolves
- * (never throws); an empty result just means show nothing. */
-export async function searchTasteArtists(query: string): Promise<PlayItem[]> {
+ * (never throws); an empty result just means show nothing. Accepts an
+ * AbortSignal so the caller can cancel a stale request the moment the
+ * user types another character, instead of racing an old response
+ * against a new one. */
+export async function searchTasteArtists(query: string, signal?: AbortSignal): Promise<PlayItem[]> {
   try {
-    const res = await fetch(`/api/play/artist-search?q=${encodeURIComponent(query)}`);
+    const res = await fetch(`/api/play/artist-search?q=${encodeURIComponent(query)}`, { signal });
     if (!res.ok) return [];
     const data = (await res.json()) as { items?: PlayItem[] };
     return data.items ?? [];

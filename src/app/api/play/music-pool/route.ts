@@ -49,6 +49,9 @@ function logMusicPoolRequest(entry: {
   listenBrainzFailed: boolean;
   musicBrainzFailed: boolean;
   durationMs: number;
+  excludeAndFamiliarityMs: number;
+  providerFetchMs: number;
+  fallbackMs: number;
 }) {
   console.log("[play/music-pool]", JSON.stringify(entry));
 }
@@ -68,21 +71,26 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ items: [], provider: "none" } satisfies PlayPool, { status: 400 });
   }
 
+  const excludeStart = Date.now();
   const [historyExclude, profile] = await Promise.all([
     getRecentlyUsedIds(spaceId, MUSIC_CATEGORY[kind]).catch(() => new Set<string>()),
     getFamiliarityProfileSafe(spaceId),
   ]);
+  const excludeAndFamiliarityMs = Date.now() - excludeStart;
   const exclude = new Set(historyExclude);
   if (excludeIdsParam) {
     for (const id of excludeIdsParam.split(",").map((s) => s.trim()).filter(Boolean)) exclude.add(id);
   }
+  const providerFetchStart = Date.now();
   const { items: liveItems, listenBrainzFailed, musicBrainzFailed } = await fetchByKind(kind, count, exclude, profile);
+  const providerFetchMs = Date.now() - providerFetchStart;
 
   const items: PlayItem[] = [...liveItems];
   const satisfiedByLiveProviders = items.length >= count;
   const liveItemCount = items.length;
   let fallbackItemCount = 0;
 
+  const fallbackStart = Date.now();
   if (items.length < count) {
     const have = new Set(items.map((i) => i.title.toLowerCase()));
     const topUp = await getKeepsMusicItems(spaceId, kind, count - items.length + have.size).catch(() => []);
@@ -94,6 +102,7 @@ export async function GET(req: NextRequest) {
       fallbackItemCount++;
     }
   }
+  const fallbackMs = Date.now() - fallbackStart;
 
   // Honest three-way label: "musicbrainz" when ListenBrainz/MusicBrainz
   // alone had enough, "keeps_music" once real personal content had to
@@ -122,6 +131,9 @@ export async function GET(req: NextRequest) {
     listenBrainzFailed,
     musicBrainzFailed,
     durationMs: Date.now() - start,
+    excludeAndFamiliarityMs,
+    providerFetchMs,
+    fallbackMs,
   });
 
   return NextResponse.json({ items, provider } satisfies PlayPool);

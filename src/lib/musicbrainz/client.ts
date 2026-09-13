@@ -20,12 +20,18 @@ const RETRY_BACKOFF_MS = 700;
 let queue: Promise<unknown> = Promise.resolve();
 let lastRequestAt = 0;
 
-function throttled<T>(fn: () => Promise<T>): Promise<T> {
+/** queueWaitMs is logged separately from the fetch itself in mbGet --
+ * per the perf pass, this is the number that proves whether a given
+ * slowdown is "waiting our turn behind other MusicBrainz calls in this
+ * same request" (queueWaitMs high) vs. "MusicBrainz itself being slow"
+ * (fetchMs high). */
+function throttled<T>(fn: (queueWaitMs: number) => Promise<T>): Promise<T> {
+  const queuedAt = Date.now();
   const run = queue.then(async () => {
     const wait = Math.max(0, lastRequestAt + MIN_GAP_MS - Date.now());
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     lastRequestAt = Date.now();
-    return fn();
+    return fn(Date.now() - queuedAt);
   });
   // Keep the queue alive even if this call fails, so later calls still wait their turn.
   queue = run.catch(() => undefined);
@@ -72,20 +78,32 @@ async function fetchOnce(path: string, revalidateSeconds: number): Promise<Respo
  * to fall back to another content source rather than block the round.
  */
 export async function mbGet<T>(path: string, revalidateSeconds: number): Promise<T> {
-  return throttled(async () => {
+  return throttled(async (queueWaitMs) => {
+    const fetchStart = Date.now();
     let res = await fetchOnce(path, revalidateSeconds);
 
     if (res.status === 429) {
       const retryAfter = Number(res.headers.get("retry-after"));
       await new Promise((r) => setTimeout(r, (Number.isFinite(retryAfter) ? retryAfter : 2) * 1000));
       res = await fetchOnce(path, revalidateSeconds);
-      if (res.status === 429) throw new MusicBrainzRateLimitedError();
+      if (res.status === 429) {
+        console.log("[perf]", JSON.stringify({ label: "musicbrainz.fetch", path, queueWaitMs, fetchMs: Date.now() - fetchStart, ok: false, status: 429 }));
+        throw new MusicBrainzRateLimitedError();
+      }
     } else if (RETRYABLE_STATUSES.has(res.status)) {
       await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS));
       res = await fetchOnce(path, revalidateSeconds);
     }
 
-    if (!res.ok) throw new MusicBrainzHttpError(res.status, path);
+    const fetchMs = Date.now() - fetchStart;
+    if (!res.ok) {
+      console.log("[perf]", JSON.stringify({ label: "musicbrainz.fetch", path, queueWaitMs, fetchMs, ok: false, status: res.status }));
+      throw new MusicBrainzHttpError(res.status, path);
+    }
+    // queueWaitMs is almost always the dominant cost for any call after
+    // the first one in a request that resolves several artists/albums --
+    // see lib/musicbrainz/client.ts's own comment on why.
+    console.log("[perf]", JSON.stringify({ label: "musicbrainz.fetch", path, queueWaitMs, fetchMs, ok: true }));
     return (await res.json()) as T;
   });
 }

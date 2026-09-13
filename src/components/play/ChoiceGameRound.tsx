@@ -10,6 +10,7 @@ import { getGameSession } from "@/services/games-read-client";
 import { prefetchMusicPool } from "@/services/music-pool-client";
 import { pickChoicePrompt, type ChoicePrompt } from "@/lib/choice-prompt";
 import { recordPlaySignal, recordPlaySignalForItems } from "@/services/play-signals-client";
+import { usePollForResult } from "@/hooks/usePollForResult";
 import { playGame } from "@/lib/play-config";
 import { RoundHeader } from "@/components/play/RoundHeader";
 import { RoundTagline } from "@/components/play/RoundTagline";
@@ -57,6 +58,11 @@ export function ChoiceGameRound({
   useEffect(() => {
     prefetchMusicPool("artist", 2, space.id);
   }, [space.id]);
+
+  // While waiting on the partner, poll for the result so it appears
+  // the moment they answer -- no manual refresh needed, and no
+  // provider content in this read path at all.
+  usePollForResult(session.id, answeredByMe && !result, (fresh) => setSession(fresh));
 
   async function submit(value: string) {
     setChoice(value);
@@ -198,8 +204,10 @@ export function ChoiceGameRound({
               >
                 <div className={`relative aspect-square w-full overflow-hidden rounded-[22px] bg-[#f2efe9] ${choice === label ? "ring-[3px] ring-[#3a362f]" : ""}`}>
                   {image ? (
+                    // Both cards are the whole screen -- always high
+                    // priority, per the perf pass's two-choice-game rule.
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={image} alt="" className="h-full w-full object-cover" />
+                    <img src={image} alt="" loading="eager" fetchPriority="high" className="h-full w-full object-cover" />
                   ) : (
                     <div className="grid h-full w-full place-items-center text-[#a39d92]">
                       <HelpCircle size={28} />

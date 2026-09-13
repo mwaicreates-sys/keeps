@@ -2,10 +2,15 @@ import Link from "next/link";
 import { ArrowLeft, Search as SearchIcon, Music2, FolderHeart, Sparkles } from "lucide-react";
 import { getSessionContext } from "@/services/session";
 import { searchSpace } from "@/services/search-server";
+import { getRecentMedia } from "@/services/posts-server";
 import { EmptyState } from "@/components/EmptyState";
+import { SearchField } from "@/components/search/SearchField";
 
-// Search has its own header — not the Home top bar (that only appears
-// on Home). Just a back arrow + the search field itself.
+// Own header (back arrow + search field) -- the Home top bar only
+// appears on Home. No query yet: show a recent-media showcase rail and
+// quick shortcuts (your real profile interests). With a query: live,
+// grouped results that update as you type (SearchField debounces and
+// soft-navigates, so this whole page just re-runs on the new q).
 
 function ResultRow({
   href,
@@ -62,7 +67,10 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   const ctx = await getSessionContext();
   if (!ctx) return null;
 
-  const results = q ? await searchSpace(ctx.space.id, q) : null;
+  const [results, recentMedia] = await Promise.all([
+    q ? searchSpace(ctx.space.id, q) : Promise.resolve(null),
+    q ? Promise.resolve([]) : getRecentMedia(ctx.space.id, ctx.userId, 6),
+  ]);
   const total = results ? results.posts.length + results.songs.length + results.collections.length : 0;
 
   return (
@@ -71,30 +79,54 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         <Link href="/home" aria-label="Back" className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-[#3a362f]">
           <ArrowLeft size={24} strokeWidth={2} />
         </Link>
-        <form action="/search" className="min-w-0 flex-1">
-          <label className="flex items-center gap-2.5 rounded-full bg-white px-4 py-3 shadow-[0_1px_8px_-4px_rgba(20,18,15,0.15)]">
-            <SearchIcon size={19} strokeWidth={2} className="shrink-0 text-[#a39d92]" />
-            <input
-              name="q"
-              defaultValue={q}
-              autoFocus
-              placeholder="football, 2026, Kendrick, funny…"
-              className="w-full min-w-0 bg-transparent text-[16px] text-[#3a362f] outline-none placeholder:text-[#a39d92]"
-            />
-          </label>
-        </form>
+        <SearchField initialQuery={q} />
       </div>
 
       <div className="px-4">
-        {!results ? (
-          <EmptyState icon={SearchIcon} title="Search your space" body="Find posts, memories, songs, and collections." />
+        {!q ? (
+          <div className="space-y-6">
+            {recentMedia.length > 0 && (
+              <section>
+                <p className="mb-2 text-[12.5px] font-semibold text-[#3a362f]">Recent</p>
+                <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
+                  {recentMedia.map((m) => (
+                    <div key={m.id} className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-[#f2efe9]">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={m.url} alt="" className="h-full w-full object-cover" />
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {ctx.profile.interests.length > 0 && (
+              <section>
+                <p className="mb-2 text-[12.5px] font-semibold text-[#3a362f]">Try searching</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {ctx.profile.interests.map((interest) => (
+                    <Link
+                      key={interest}
+                      href={`/search?q=${encodeURIComponent(interest)}`}
+                      className="rounded-full bg-white px-3 py-1.5 text-[12px] font-medium text-[#3a362f] shadow-[0_2px_10px_-6px_rgba(20,18,15,0.12)]"
+                    >
+                      {interest}
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {recentMedia.length === 0 && ctx.profile.interests.length === 0 && (
+              <EmptyState icon={SearchIcon} title="Search your space" body="Find posts, memories, songs, and collections." />
+            )}
+          </div>
         ) : total === 0 ? (
           <EmptyState icon={SearchIcon} title="No results" body={`Nothing matched "${q}" yet.`} />
         ) : (
           <div className="space-y-5">
-            {results.posts.length > 0 && (
+            {results!.posts.length > 0 && (
               <ResultSection title="Posts & Memories">
-                {results.posts.map((p) => (
+                {results!.posts.map((p) => (
                   <li key={p.id}>
                     <ResultRow
                       href={`/memories/${p.id}`}
@@ -110,9 +142,9 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
               </ResultSection>
             )}
 
-            {results.songs.length > 0 && (
+            {results!.songs.length > 0 && (
               <ResultSection title="Songs">
-                {results.songs.map((s) => (
+                {results!.songs.map((s) => (
                   <li key={s.post_id}>
                     <ResultRow
                       href={`/memories/${s.post_id}`}
@@ -128,9 +160,9 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
               </ResultSection>
             )}
 
-            {results.collections.length > 0 && (
+            {results!.collections.length > 0 && (
               <ResultSection title="Collections">
-                {results.collections.map((c) => (
+                {results!.collections.map((c) => (
                   <li key={c.id}>
                     <ResultRow
                       href={`/collections/${c.id}`}

@@ -19,6 +19,7 @@ export function usesHomeLightTheme(pathname: string): boolean {
     pathname.startsWith("/collections/") ||
     pathname === "/drop" ||
     pathname === "/play" ||
+    pathname.startsWith("/play/") ||
     pathname === "/profile" ||
     pathname === "/notifications" ||
     pathname === "/search"

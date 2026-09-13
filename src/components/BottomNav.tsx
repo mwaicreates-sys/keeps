@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Archive, Plus } from "lucide-react";
+import { Home, Archive, Plus, Gamepad2 } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
 import { Avatar } from "@/components/Avatar";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,7 @@ const items: { href: string; label: string; icon: typeof Home; primary?: boolean
   { href: "/home", label: "Home", icon: Home },
   { href: "/memories", label: "Memories", icon: Archive },
   { href: "/drop", label: "Drop", icon: Plus, primary: true },
+  { href: "/play", label: "Play", icon: Gamepad2 },
 ];
 
 /** Hides the nav while the page is actively scrolling, brings it back

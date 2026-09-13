@@ -140,6 +140,7 @@ export function gameHref(gameType: string): string {
     blind_rank: "blind-rank",
     guess_mine: "guess-mine",
     keep3_drop2: "keep3-drop2",
+    match_predictions: "match-predictions",
   };
   return `/play/${map[gameType] ?? "this-or-that"}`;
 }

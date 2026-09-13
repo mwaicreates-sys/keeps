@@ -39,9 +39,27 @@ export type MusicPoolResponse = PlayPool & {
    * hidden behind a plain "it worked" response. */
   listenBrainzFailed: boolean;
   musicBrainzFailed: boolean;
+  /**
+   * TEMPORARY, testing-phase only: verbose per-request breakdown so we
+   * can watch the real fallback chain in action against production.
+   * Game components never read this (they only destructure `.items`),
+   * so it's inert in the normal UI -- remove once the live provider is
+   * proven reliable and no longer needed for verification.
+   */
+  debug: {
+    requestedKind: Kind;
+    requestedCount: number;
+    primaryProviderAttempted: "listenbrainz+musicbrainz";
+    providerUsed: string;
+    fallbackReason: string | null;
+    liveItemCount: number;
+    fallbackItemCount: number;
+    durationMs: number;
+  };
 };
 
 export async function GET(req: NextRequest) {
+  const start = Date.now();
   const params = req.nextUrl.searchParams;
   const kind = params.get("kind") as Kind | null;
   const count = Math.min(10, Math.max(1, Number(params.get("count")) || 2));
@@ -49,7 +67,22 @@ export async function GET(req: NextRequest) {
 
   if (!kind || !["artist", "album", "track"].includes(kind) || !spaceId) {
     return NextResponse.json(
-      { items: [], provider: "none", listenBrainzFailed: false, musicBrainzFailed: false } satisfies MusicPoolResponse,
+      {
+        items: [],
+        provider: "none",
+        listenBrainzFailed: false,
+        musicBrainzFailed: false,
+        debug: {
+          requestedKind: (kind ?? "artist") as Kind,
+          requestedCount: count,
+          primaryProviderAttempted: "listenbrainz+musicbrainz",
+          providerUsed: "none",
+          fallbackReason: "missing kind/spaceId",
+          liveItemCount: 0,
+          fallbackItemCount: 0,
+          durationMs: Date.now() - start,
+        },
+      } satisfies MusicPoolResponse,
       { status: 400 }
     );
   }
@@ -59,6 +92,8 @@ export async function GET(req: NextRequest) {
 
   const items: PlayItem[] = [...liveItems];
   const satisfiedByLiveProviders = items.length >= count;
+  const liveItemCount = items.length;
+  let fallbackItemCount = 0;
 
   if (items.length < count) {
     const have = new Set(items.map((i) => i.title.toLowerCase()));
@@ -68,6 +103,7 @@ export async function GET(req: NextRequest) {
       if (have.has(item.title.toLowerCase())) continue;
       have.add(item.title.toLowerCase());
       items.push(item);
+      fallbackItemCount++;
     }
   }
 
@@ -78,5 +114,30 @@ export async function GET(req: NextRequest) {
   // pack.
   const provider = satisfiedByLiveProviders ? "musicbrainz" : items.length >= count ? "keeps_music" : "keeps_picks";
 
-  return NextResponse.json({ items, provider, listenBrainzFailed, musicBrainzFailed } satisfies MusicPoolResponse);
+  const fallbackReason = satisfiedByLiveProviders
+    ? null
+    : listenBrainzFailed && musicBrainzFailed
+      ? "listenbrainz and musicbrainz both failed/errored"
+      : listenBrainzFailed
+        ? "listenbrainz failed/errored; musicbrainz had too few results"
+        : musicBrainzFailed
+          ? "musicbrainz failed/errored after listenbrainz topped up"
+          : `live providers only returned ${liveItemCount}/${count} usable items`;
+
+  return NextResponse.json({
+    items,
+    provider,
+    listenBrainzFailed,
+    musicBrainzFailed,
+    debug: {
+      requestedKind: kind,
+      requestedCount: count,
+      primaryProviderAttempted: "listenbrainz+musicbrainz",
+      providerUsed: provider,
+      fallbackReason,
+      liveItemCount,
+      fallbackItemCount,
+      durationMs: Date.now() - start,
+    },
+  } satisfies MusicPoolResponse);
 }

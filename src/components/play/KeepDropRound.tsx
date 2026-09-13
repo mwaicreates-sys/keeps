@@ -10,6 +10,7 @@ import { getGameSession } from "@/services/games-read-client";
 import { warmAllKeepDropKinds, pickKeepDropPrompt, KEEP_COUNT, type KeepDropPrompt } from "@/lib/keep-drop-prompt";
 import { playGame } from "@/lib/play-config";
 import { RoundHeader } from "@/components/play/RoundHeader";
+import { RoundTagline } from "@/components/play/RoundTagline";
 import { getErrorMessage } from "@/lib/utils";
 import type { GameSessionRow } from "@/lib/game-types";
 
@@ -208,6 +209,8 @@ export function KeepDropRound({ session: initialSession, roundNumber }: { sessio
           </button>
         </div>
       )}
+
+      {game.tagline && game.taglineIcon && <RoundTagline text={game.tagline} icon={game.taglineIcon} />}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { Heart, ListOrdered, EyeOff, Trophy, HelpCircle, Scissors, type LucideIcon } from "lucide-react";
+import { Heart, ListOrdered, EyeOff, Trophy, HelpCircle, Scissors, Music, Sparkles, Smile, type LucideIcon } from "lucide-react";
 import type { GameType } from "@/services/games-client";
 
 export type PlayGameConfig = {
@@ -10,6 +10,10 @@ export type PlayGameConfig = {
   bg: string;
   iconBg: string;
   iconColor: string;
+  /** A short, decorative handwritten-style line shown under the active
+   * round -- flavor copy only, not shown anywhere functional. */
+  tagline?: string;
+  taglineIcon?: LucideIcon;
 };
 
 /** Single source of truth for every game's route, copy, icon and color —
@@ -24,6 +28,8 @@ export const PLAY_GAMES: PlayGameConfig[] = [
     bg: "#fbe9ec",
     iconBg: "#f7d3d9",
     iconColor: "#c2495f",
+    tagline: "Music hits different together",
+    taglineIcon: Music,
   },
   {
     type: "top5",
@@ -44,6 +50,8 @@ export const PLAY_GAMES: PlayGameConfig[] = [
     bg: "#e6f2e9",
     iconBg: "#cde7d4",
     iconColor: "#2f8f52",
+    tagline: "Music tastes say a lot",
+    taglineIcon: Sparkles,
   },
   {
     type: "match_predictions",
@@ -64,6 +72,8 @@ export const PLAY_GAMES: PlayGameConfig[] = [
     bg: "#faf1e2",
     iconBg: "#f2e0bd",
     iconColor: "#a3742b",
+    tagline: "Different choices. Same good company.",
+    taglineIcon: Smile,
   },
   {
     type: "keep3_drop2",
@@ -74,6 +84,8 @@ export const PLAY_GAMES: PlayGameConfig[] = [
     bg: "#fdecec",
     iconBg: "#f8d6d6",
     iconColor: "#c23a3a",
+    tagline: "More than answers. A closer you.",
+    taglineIcon: Heart,
   },
 ];
 

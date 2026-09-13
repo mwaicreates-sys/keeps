@@ -11,6 +11,7 @@ import { prefetchMusicPool } from "@/services/music-pool-client";
 import { pickBlindRankPrompt, BLIND_RANK_ROUND_SIZE, type BlindRankPrompt } from "@/lib/blind-rank-prompt";
 import { playGame } from "@/lib/play-config";
 import { RoundHeader } from "@/components/play/RoundHeader";
+import { RoundTagline } from "@/components/play/RoundTagline";
 import { getErrorMessage } from "@/lib/utils";
 import type { GameSessionRow } from "@/lib/game-types";
 
@@ -195,6 +196,8 @@ export function BlindRankRound({ session: initialSession, roundNumber }: { sessi
           </div>
         </div>
       )}
+
+      {game.tagline && game.taglineIcon && <RoundTagline text={game.tagline} icon={game.taglineIcon} />}
     </div>
   );
 }

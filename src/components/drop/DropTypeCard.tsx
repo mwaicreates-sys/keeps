@@ -21,8 +21,12 @@ const CARD_STYLE: Record<
 
 /**
  * One hero card in the Drop type grid. `preview` is a small type-specific
- * hint (a photo stack, album art, a scrap of real caption text, …) so six
- * cards don't read as six identical icon buttons.
+ * hint (a couple of thumbnails, a scrap of real caption text, …) so six
+ * cards don't read as six identical icon buttons. Laid out top-to-bottom
+ * in normal flow (icon+chevron, then label/subtitle, then the preview
+ * pinned to the bottom via `mt-auto`) rather than absolutely positioned —
+ * a stray preview can never overlap the label/subtitle text this way, no
+ * matter how long a real caption or place name turns out to be.
  */
 export function DropTypeCard({
   type,
@@ -39,24 +43,24 @@ export function DropTypeCard({
     <button
       type="button"
       onClick={onSelect}
-      className="relative flex h-[164px] flex-col justify-between overflow-hidden rounded-[26px] px-5 py-4 text-left transition active:scale-[0.98]"
+      className="flex min-h-[176px] flex-col rounded-[26px] px-4 py-3.5 text-left transition active:scale-[0.98]"
       style={{ backgroundColor: bg }}
     >
       <div className="flex items-start justify-between">
-        <span className="grid h-[52px] w-[52px] place-items-center rounded-2xl" style={{ backgroundColor: iconBg, color: iconColor }}>
-          <Icon size={32} strokeWidth={2} />
+        <span className="grid h-11 w-11 place-items-center rounded-2xl" style={{ backgroundColor: iconBg, color: iconColor }}>
+          <Icon size={23} strokeWidth={2} />
         </span>
-        <span className="-m-2.5 grid h-11 w-11 place-items-center">
-          <ChevronRight size={23} className="text-[#00000060]" />
+        <span className="-m-2 grid h-9 w-9 place-items-center">
+          <ChevronRight size={19} className="text-[#00000060]" />
         </span>
       </div>
 
-      {preview && <div className="absolute bottom-4 right-4">{preview}</div>}
-
-      <div className="max-w-[68%]">
-        <p className="text-[19px] font-bold leading-tight text-[#2c281f]">{label}</p>
-        <p className="mt-1 text-[15px] leading-[1.35] text-[#5c574c]">{subtitle}</p>
+      <div className="mt-2.5 min-w-0">
+        <p className="text-[16.5px] font-bold leading-tight text-[#2c281f]">{label}</p>
+        <p className="mt-0.5 text-[12px] leading-[1.35] text-[#5c574c]">{subtitle}</p>
       </div>
+
+      {preview && <div className="mt-auto min-w-0 pt-2.5">{preview}</div>}
     </button>
   );
 }

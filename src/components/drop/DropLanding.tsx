@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Image as ImageIcon, Music2, Type as TypeIcon, MapPin, Star } from "lucide-react";
+import { Image as ImageIcon, Music2, MapPin, Star } from "lucide-react";
 import type { DropType } from "@/services/posts-client";
 import { DropTypeCard } from "@/components/drop/DropTypeCard";
 import { RecentMediaRail } from "@/components/drop/RecentMediaRail";
@@ -60,6 +60,12 @@ export function DropLanding({
   );
 }
 
+/**
+ * A small type-specific hint, sized to sit in normal flow at the bottom
+ * of its card (see DropTypeCard) without ever needing to overlap the
+ * label/subtitle above it. Every card returns something roughly the same
+ * footprint (~36px tall) so the six cards read as one consistent grid.
+ */
 function TypePreview({
   type,
   recentMedia,
@@ -72,19 +78,13 @@ function TypePreview({
   recentPlace: string | null;
 }) {
   if (type === "photo") {
-    const shots = recentMedia.slice(0, 2);
-    if (shots.length === 0) return <ImageIcon size={30} className="text-[#00000030]" />;
+    const shots = recentMedia.slice(0, 3);
+    if (shots.length === 0) return null;
     return (
-      <div className="relative h-[76px] w-[84px]">
-        {shots.map((m, i) => (
+      <div className="flex gap-1">
+        {shots.map((m) => (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
-            key={m.id}
-            src={m.url}
-            alt=""
-            className="absolute h-16 w-16 rounded-xl border-2 border-white object-cover shadow-sm"
-            style={{ right: i * 16, bottom: i * 8, zIndex: shots.length - i }}
-          />
+          <img key={m.id} src={m.url} alt="" className="h-9 w-9 rounded-lg border border-white/70 object-cover shadow-sm" />
         ))}
       </div>
     );
@@ -92,41 +92,42 @@ function TypePreview({
 
   if (type === "video") {
     return (
-      <div className="grid h-[70px] w-[78px] place-items-center rounded-xl bg-[#00000010]">
-        <ImageIcon size={26} className="text-[#00000040]" />
+      <div className="grid h-9 w-9 place-items-center rounded-lg bg-[#00000010]">
+        <ImageIcon size={17} className="text-[#00000045]" />
       </div>
     );
   }
 
   if (type === "song") {
     return (
-      <div className="grid h-[70px] w-[70px] place-items-center rounded-xl bg-[#00000012]">
-        <Music2 size={26} className="text-[#00000045]" />
+      <div className="grid h-9 w-9 place-items-center rounded-lg bg-[#00000012]">
+        <Music2 size={17} className="text-[#00000050]" />
       </div>
     );
   }
 
   if (type === "text") {
-    if (!recentCaption) return <TypeIcon size={28} className="text-[#00000030]" />;
+    if (!recentCaption) return null;
     return (
-      <div className="max-w-[140px] rounded-xl bg-white/70 px-3 py-2.5 text-[12.5px] leading-snug text-[#5c574c] shadow-sm">
-        {`"${recentCaption.slice(0, 40)}${recentCaption.length > 40 ? "…" : ""}"`}
+      <div className="truncate rounded-lg bg-white/70 px-2.5 py-2 text-[11px] leading-snug text-[#5c574c] shadow-sm">
+        {`“${recentCaption.slice(0, 28)}${recentCaption.length > 28 ? "…" : ""}”`}
       </div>
     );
   }
 
   if (type === "activity") {
+    if (!recentPlace) return null;
     return (
-      <div className="flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-2 shadow-sm">
-        <MapPin size={14} className="text-[#2f6fa3]" />
-        {recentPlace && <span className="text-[12.5px] font-medium text-[#3a362f]">{recentPlace}</span>}
+      <div className="flex w-fit max-w-full items-center gap-1 truncate rounded-full bg-white/80 px-2.5 py-1.5 text-[11px] font-medium text-[#3a362f] shadow-sm">
+        <MapPin size={12} className="shrink-0 text-[#2f6fa3]" />
+        <span className="truncate">{recentPlace}</span>
       </div>
     );
   }
 
   return (
-    <div className="grid h-[68px] w-[68px] place-items-center rounded-xl bg-[#00000012]">
-      <Star size={28} className="fill-[#00000022] text-[#00000038]" />
+    <div className="grid h-9 w-9 place-items-center rounded-lg bg-[#00000012]">
+      <Star size={17} className="fill-[#00000025] text-[#00000045]" />
     </div>
   );
 }

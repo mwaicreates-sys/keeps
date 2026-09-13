@@ -137,7 +137,7 @@ export function FeedPost({ post }: { post: FeedPostData }) {
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               placeholder="Reply…"
-              className="min-w-0 flex-1 rounded-full bg-[#f7f5f1] px-3.5 py-2 text-sm outline-none"
+              className="min-w-0 flex-1 rounded-full bg-[#f7f5f1] px-3.5 py-2 text-sm text-[#3a362f] outline-none placeholder:text-[#a39d92]"
             />
             <button type="submit" className="rounded-full bg-[#3a362f] px-4 text-sm font-medium text-white">
               Send

@@ -1,30 +1,51 @@
+import Link from "next/link";
 import { getSessionContext } from "@/services/session";
 import { createClient } from "@/lib/supabase/server";
 import { getActiveStories } from "@/services/stories-server";
+import { getResurfaced } from "@/services/resurfacing";
 import { HomeHeader } from "@/components/home/HomeHeader";
 import { StoryRail } from "@/components/StoryRail";
 
 // Building this page piece by piece, confirming each part before adding
-// the next. Step 2: top bar (confirmed) + story rail.
+// the next. Step 3: top bar + story rail (both confirmed) + resurfaced
+// memories rail.
 
 export default async function HomePage() {
   const ctx = await getSessionContext();
   if (!ctx) return null;
 
   const supabase = await createClient();
-  const [{ count: unreadCount }, stories] = await Promise.all([
+  const [{ count: unreadCount }, stories, resurfaced] = await Promise.all([
     supabase
       .from("notifications")
       .select("id", { count: "exact", head: true })
       .eq("user_id", ctx.userId)
       .is("read_at", null),
     getActiveStories(ctx.space.id, ctx.userId),
+    getResurfaced(ctx.space.id),
   ]);
 
   return (
     <div className="mx-auto w-full max-w-xl pb-4 md:max-w-2xl md:py-4">
       <HomeHeader unreadCount={unreadCount ?? 0} />
       <StoryRail stories={stories} currentUserId={ctx.userId} />
+
+      {resurfaced.length > 0 && (
+        <div className="no-scrollbar flex gap-2 overflow-x-auto px-4 pb-2 pt-1">
+          {resurfaced.map(({ label, post }) => (
+            <Link
+              key={post.id}
+              href={`/memories/${post.id}`}
+              className="flex min-h-[62px] w-[128px] shrink-0 flex-col justify-center gap-1 rounded-xl bg-white p-3 shadow-[0_2px_10px_-6px_rgba(20,18,15,0.12)]"
+            >
+              <span className="text-[10px] font-bold uppercase tracking-wide text-[#c99a2e]">{label}</span>
+              <span className="truncate text-[13px] font-medium text-[#4a453d]">
+                {post.caption || `A ${post.type} you kept`}
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

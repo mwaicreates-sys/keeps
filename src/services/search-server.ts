@@ -75,6 +75,55 @@ export async function searchSpace(spaceId: string, q: string, type?: SearchResul
   };
 }
 
+export type SearchShowcaseItem = {
+  photo: { url: string } | null;
+  song: { title: string; artist: string | null } | null;
+  text: { caption: string } | null;
+};
+
+/**
+ * Just enough for SearchShowcase's 3 preview cards -- a far lighter
+ * query than reusing getFeed() (which joins author/media/song/favorite/
+ * reactions and then runs 2 more batched queries for comment counts and
+ * saved-item status, none of which the showcase needs). One narrow
+ * select, capped small, no hydration step.
+ */
+export async function getSearchShowcase(spaceId: string): Promise<SearchShowcaseItem> {
+  const supabase = await createClient();
+  const [{ data: photoRow }, { data: songRow }, { data: textRow }] = await Promise.all([
+    supabase
+      .from("post_media")
+      .select("url, posts!inner(space_id)")
+      .eq("posts.space_id", spaceId)
+      .eq("media_type", "photo")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("post_song_metadata")
+      .select("title, artist, posts!inner(space_id)")
+      .eq("posts.space_id", spaceId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("posts")
+      .select("caption")
+      .eq("space_id", spaceId)
+      .eq("type", "text")
+      .not("caption", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  return {
+    photo: photoRow ? { url: photoRow.url } : null,
+    song: songRow ? { title: songRow.title, artist: songRow.artist } : null,
+    text: textRow?.caption ? { caption: textRow.caption } : null,
+  };
+}
+
 /** Same mapping Notifications uses to route a game_type to its real page. */
 export function gameHref(gameType: string): string {
   const map: Record<string, string> = {

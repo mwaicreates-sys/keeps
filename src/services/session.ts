@@ -1,5 +1,7 @@
 import { cache } from "react";
+import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { TRUSTED_USER_HEADER } from "@/lib/supabase/middleware";
 import type { Tables } from "@/lib/types";
 
 export type SessionContext = {
@@ -27,21 +29,40 @@ export type SessionContext = {
  * second call in the same render pass is free — no change to what gets
  * checked or how fresh it is, since a new request always gets a fresh
  * cache.
+ *
+ * The middleware already calls auth.getUser() once per request — a real
+ * network round trip to Supabase's Auth server to verify the JWT — and
+ * forwards the verified id via a request header it controls (see
+ * lib/supabase/middleware.ts; the header is always stripped from what
+ * the client sent and only re-added there, after verification, so it
+ * can't be spoofed). When that header is present this trusts it instead
+ * of paying for a second identical Auth-server round trip; the actual
+ * data queries below still go through the normal cookie-authenticated
+ * client, so RLS enforcement is completely unchanged either way. Falls
+ * back to auth.getUser() if the header is somehow missing.
  */
 export const getSessionContext = cache(async (): Promise<SessionContext | null> => {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  const trustedUserId = (await headers()).get(TRUSTED_USER_HEADER);
+
+  let userId: string;
+  if (trustedUserId) {
+    userId = trustedUserId;
+  } else {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return null;
+    userId = user.id;
+  }
 
   // Profile and space membership are independent lookups (both only need
-  // user.id) — run them together instead of one after the other. Unread
-  // count also only needs user.id, so it joins the same round trip.
+  // userId) — run them together instead of one after the other. Unread
+  // count also only needs userId, so it joins the same round trip.
   const [{ data: profile }, { data: membership }, { count: unreadCount }] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", user.id).maybeSingle(),
-    supabase.from("space_members").select("space_id, spaces(*)").eq("user_id", user.id).limit(1).maybeSingle(),
-    supabase.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", user.id).is("read_at", null),
+    supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
+    supabase.from("space_members").select("space_id, spaces(*)").eq("user_id", userId).limit(1).maybeSingle(),
+    supabase.from("notifications").select("id", { count: "exact", head: true }).eq("user_id", userId).is("read_at", null),
   ]);
   if (!profile) return null;
   if (!membership || !membership.spaces) return null;
@@ -51,7 +72,7 @@ export const getSessionContext = cache(async (): Promise<SessionContext | null> 
   const { data: memberRows } = await supabase.from("space_members").select("profiles(*)").eq("space_id", space.id);
 
   const members = (memberRows ?? []).map((r) => r.profiles as unknown as Tables<"profiles">).filter(Boolean);
-  const otherMember = members.find((m) => m.id !== user.id) ?? null;
+  const otherMember = members.find((m) => m.id !== userId) ?? null;
 
-  return { userId: user.id, profile, space, members, otherMember, unreadCount: unreadCount ?? 0 };
+  return { userId, profile, space, members, otherMember, unreadCount: unreadCount ?? 0 };
 });

@@ -13,8 +13,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { getSessionContext } from "@/services/session";
-import { searchSpace, gameHref, type SearchResultType } from "@/services/search-server";
-import { getFeed } from "@/services/posts-server";
+import { searchSpace, gameHref, getSearchShowcase, type SearchResultType } from "@/services/search-server";
 import { EmptyState } from "@/components/EmptyState";
 import { HomeHeader } from "@/components/home/HomeHeader";
 import { SearchField } from "@/components/search/SearchField";
@@ -125,28 +124,18 @@ export default async function SearchPage({
   const ctx = await getSessionContext();
   if (!ctx) return null;
 
-  const [results, feedSample] = await Promise.all([
+  const [results, showcase] = await Promise.all([
     q ? searchSpace(ctx.space.id, q, type) : Promise.resolve(null),
-    q ? Promise.resolve([]) : getFeed(ctx.space.id, ctx.userId, 15),
+    q ? Promise.resolve(null) : getSearchShowcase(ctx.space.id),
   ]);
   const total = results ? results.posts.length + results.songs.length + results.collections.length + results.games.length : 0;
-
-  const showcasePhoto = feedSample.flatMap((p) => p.media).find((m) => m.media_type === "photo") ?? null;
-  const showcaseSong = feedSample.find((p) => p.song)?.song ?? null;
-  const showcaseText = feedSample.find((p) => p.type === "text" && p.caption) ?? null;
 
   return (
     <div className="mx-auto w-full max-w-xl pb-4 md:max-w-2xl md:py-4">
       <HomeHeader unreadCount={ctx.unreadCount} />
 
       <div className="px-4 pb-3 pt-1">
-        {!q && (
-          <SearchShowcase
-            photo={showcasePhoto}
-            song={showcaseSong ? { title: showcaseSong.title, artist: showcaseSong.artist } : null}
-            text={showcaseText ? { caption: showcaseText.caption! } : null}
-          />
-        )}
+        {!q && showcase && <SearchShowcase photo={showcase.photo} song={showcase.song} text={showcase.text} />}
         <SearchField initialQuery={q} />
       </div>
 

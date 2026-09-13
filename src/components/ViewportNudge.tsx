@@ -21,6 +21,16 @@ export function ViewportNudge() {
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => {
+      // Force the browser to re-parse the viewport meta tag and drop any
+      // stuck pinch-zoom/visual-viewport scale it's carrying over from the
+      // previous route — mutating the attribute (not just re-reading it)
+      // is what actually triggers mobile browsers to recompute this.
+      const meta = document.querySelector('meta[name="viewport"]');
+      if (meta) {
+        const original = meta.getAttribute("content") ?? "";
+        meta.setAttribute("content", original + ", user-scalable=yes");
+        requestAnimationFrame(() => meta.setAttribute("content", original));
+      }
       window.scrollTo(0, 1);
       window.scrollTo(0, 0);
     });

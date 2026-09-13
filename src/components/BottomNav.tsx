@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Home, Archive, Plus } from "lucide-react";
@@ -13,70 +14,101 @@ const items: { href: string; label: string; icon: typeof Home; primary?: boolean
   { href: "/drop", label: "Drop", icon: Plus, primary: true },
 ];
 
+/** Hides the nav while the page is actively scrolling, brings it back
+ * once scrolling has stopped for a beat — same behavior as the
+ * reference toolbar. */
+function useHideOnScroll() {
+  const [visible, setVisible] = useState(true);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    function onScroll() {
+      setVisible(false);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => setVisible(true), 400);
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
+  return visible;
+}
+
 export function BottomNav() {
   const pathname = usePathname();
   const { profile } = useSession();
   const profileActive = pathname.startsWith("/profile");
+  const visible = useHideOnScroll();
 
   return (
-    <nav
-      aria-label="Primary"
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-[#f0ede6] bg-white/95 backdrop-blur md:hidden"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    <div
+      className={cn(
+        "fixed inset-x-0 bottom-0 z-40 flex justify-center px-4 transition-all duration-300 md:hidden",
+        visible ? "translate-y-0 opacity-100" : "translate-y-[calc(100%+24px)] opacity-0"
+      )}
+      style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 12px)" }}
     >
-      <ul className="flex h-16 items-center justify-between px-3">
-        {items.map(({ href, label, icon: Icon, primary }) => {
-          const active = pathname.startsWith(href);
-          return (
-            <li key={href} className="flex flex-1 items-center justify-center">
-              <Link
-                href={href}
-                aria-current={active ? "page" : undefined}
-                className={cn(
-                  "flex flex-col items-center justify-center gap-0.5 rounded-full px-3 py-1 transition-colors",
-                  active && !primary && "bg-[#f2efe9]"
-                )}
-              >
-                {primary ? (
-                  <span className="grid h-9 w-9 place-items-center rounded-full bg-[#3a362f] text-white">
-                    <Icon size={20} strokeWidth={2.2} />
-                  </span>
-                ) : (
-                  <Icon size={20} strokeWidth={active ? 2.3 : 2} className={active ? "text-[#3a362f]" : "text-[#716b5f]"} />
-                )}
-                <span
+      <nav
+        aria-label="Primary"
+        className="flex items-center gap-1 rounded-full bg-white px-2 py-1.5 shadow-[0_6px_24px_-6px_rgba(20,18,15,0.25)] ring-1 ring-black/[0.04]"
+      >
+        <ul className="flex items-center gap-1">
+          {items.map(({ href, label, icon: Icon, primary }) => {
+            const active = pathname.startsWith(href);
+            return (
+              <li key={href}>
+                <Link
+                  href={href}
+                  aria-current={active ? "page" : undefined}
                   className={cn(
-                    "text-[10px] leading-none",
-                    active ? "font-semibold text-[#3a362f]" : "font-medium text-[#a39d92]"
+                    "flex flex-col items-center justify-center gap-0.5 rounded-full px-3 py-1.5 transition-colors",
+                    active && !primary && "bg-[#f2efe9]"
                   )}
                 >
-                  {label}
-                </span>
-              </Link>
-            </li>
-          );
-        })}
-        <li className="flex flex-1 items-center justify-center">
-          <Link
-            href="/profile"
-            aria-current={profileActive ? "page" : undefined}
-            className={cn(
-              "flex flex-col items-center justify-center gap-0.5 rounded-full px-3 py-1 transition-colors",
-              profileActive && "bg-[#f2efe9]"
-            )}
-          >
-            <Avatar name={profile.display_name} url={profile.avatar_url} size={20} />
-            <span
+                  {primary ? (
+                    <span className="grid h-9 w-9 place-items-center rounded-full bg-[#3a362f] text-white">
+                      <Icon size={20} strokeWidth={2.2} />
+                    </span>
+                  ) : (
+                    <Icon size={20} strokeWidth={active ? 2.3 : 2} className={active ? "text-[#3a362f]" : "text-[#716b5f]"} />
+                  )}
+                  <span
+                    className={cn(
+                      "text-[10px] leading-none",
+                      active ? "font-semibold text-[#3a362f]" : "font-medium text-[#a39d92]"
+                    )}
+                  >
+                    {label}
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+          <li>
+            <Link
+              href="/profile"
+              aria-current={profileActive ? "page" : undefined}
               className={cn(
-                "text-[10px] leading-none",
-                profileActive ? "font-semibold text-[#3a362f]" : "font-medium text-[#a39d92]"
+                "flex flex-col items-center justify-center gap-0.5 rounded-full px-3 py-1.5 transition-colors",
+                profileActive && "bg-[#f2efe9]"
               )}
             >
-              Profile
-            </span>
-          </Link>
-        </li>
-      </ul>
-    </nav>
+              <Avatar name={profile.display_name} url={profile.avatar_url} size={20} />
+              <span
+                className={cn(
+                  "text-[10px] leading-none",
+                  profileActive ? "font-semibold text-[#3a362f]" : "font-medium text-[#a39d92]"
+                )}
+              >
+                Profile
+              </span>
+            </Link>
+          </li>
+        </ul>
+      </nav>
+    </div>
   );
 }

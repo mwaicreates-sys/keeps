@@ -8,7 +8,6 @@ import { TopBar } from "@/components/TopBar";
 import { HideOnHome } from "@/components/HideOnHome";
 import { MainSurface } from "@/components/MainSurface";
 import { AppThemeShell } from "@/components/AppThemeShell";
-import { ViewportNudge } from "@/components/ViewportNudge";
 import { SessionProvider } from "@/components/SessionProvider";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -17,7 +16,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <SessionProvider value={ctx}>
-      <ViewportNudge />
       <AppThemeShell>
         <DesktopSidebar />
         <div className="flex min-h-[100vh] flex-1 flex-col">

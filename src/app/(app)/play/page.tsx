@@ -30,7 +30,7 @@ export default async function PlayHubPage() {
   ]);
 
   return (
-    <div className="mx-auto max-w-xl pb-4 md:max-w-2xl md:py-4">
+    <div className="w-full min-w-0 pb-4 md:mx-auto md:max-w-2xl md:py-4">
       <HomeHeader unreadCount={unreadCount ?? 0} />
 
       <PageIntro title="Play" subtitle="Little games that say more than a chat ever could." />

@@ -37,30 +37,27 @@ export function DropTypeCard({
   onSelect: () => void;
   preview?: React.ReactNode;
 }) {
-  const { bg, iconBg, iconColor, label, subtitle, icon: Icon } = CARD_STYLE[type];
+  const { bg, iconBg, iconColor, label, icon: Icon } = CARD_STYLE[type];
 
   return (
     <button
       type="button"
       onClick={onSelect}
-      className="flex min-h-[176px] flex-col rounded-[26px] px-4 py-3.5 text-left transition active:scale-[0.98]"
+      className="flex min-h-[122px] flex-col rounded-[22px] px-3.5 py-3 text-left transition active:scale-[0.98]"
       style={{ backgroundColor: bg }}
     >
       <div className="flex items-start justify-between">
-        <span className="grid h-11 w-11 place-items-center rounded-2xl" style={{ backgroundColor: iconBg, color: iconColor }}>
-          <Icon size={23} strokeWidth={2} />
+        <span className="grid h-10 w-10 place-items-center rounded-xl" style={{ backgroundColor: iconBg, color: iconColor }}>
+          <Icon size={20} strokeWidth={2} />
         </span>
-        <span className="-m-2 grid h-9 w-9 place-items-center">
-          <ChevronRight size={19} className="text-[#00000060]" />
+        <span className="-m-2 grid h-8 w-8 place-items-center">
+          <ChevronRight size={17} className="text-[#00000060]" />
         </span>
       </div>
 
-      <div className="mt-2.5 min-w-0">
-        <p className="text-[16.5px] font-bold leading-tight text-[#2c281f]">{label}</p>
-        <p className="mt-0.5 text-[12px] leading-[1.35] text-[#5c574c]">{subtitle}</p>
-      </div>
+      <p className="mt-2 text-[15px] font-bold leading-tight text-[#2c281f]">{label}</p>
 
-      {preview && <div className="mt-auto min-w-0 pt-2.5">{preview}</div>}
+      {preview && <div className="mt-auto min-w-0 pt-2">{preview}</div>}
     </button>
   );
 }

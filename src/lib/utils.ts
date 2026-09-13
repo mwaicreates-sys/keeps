@@ -22,6 +22,10 @@ export function timeAgo(iso: string): string {
   return `${Math.floor(d / 365)}y`;
 }
 
+export function daysSince(iso: string): number {
+  return Math.max(1, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
+}
+
 export function initials(name: string): string {
   return name
     .trim()

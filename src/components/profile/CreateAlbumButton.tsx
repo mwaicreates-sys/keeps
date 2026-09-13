@@ -33,25 +33,33 @@ export function CreateAlbumButton({ spaceId, userId }: { spaceId: string; userId
 
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)} className="flex items-center gap-1 text-sm font-medium text-accent">
-        <Plus size={15} /> Create album
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex shrink-0 items-center gap-1 rounded-full bg-[#f2efe9] px-3 py-1.5 text-[12.5px] font-semibold text-[#3a362f]"
+      >
+        <Plus size={13} /> New album
       </button>
     );
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex items-center gap-2">
+    <form onSubmit={onSubmit} className="flex shrink-0 items-center gap-1.5">
       <input
         autoFocus
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="Album name"
-        className="w-32 rounded-full border border-line bg-paper px-3 py-1.5 text-xs outline-none focus:border-accent"
+        className="w-28 rounded-full bg-[#f7f5f1] px-3 py-1.5 text-[12px] text-[#3a362f] outline-none placeholder:text-[#a39d92]"
       />
-      <button type="submit" disabled={submitting} className="rounded-full bg-ink px-3 py-1.5 text-xs text-paper disabled:opacity-50">
+      <button
+        type="submit"
+        disabled={submitting}
+        className="shrink-0 rounded-full bg-[#3a362f] px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-50"
+      >
         {submitting ? "…" : "Add"}
       </button>
-      <button type="button" onClick={() => setOpen(false)} className="text-xs text-ink-soft">
+      <button type="button" onClick={() => setOpen(false)} className="shrink-0 text-[12px] font-medium text-[#a39d92]">
         Cancel
       </button>
     </form>

@@ -20,7 +20,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <ViewportNudge />
       <AppThemeShell>
         <DesktopSidebar />
-        <div className="flex min-h-dvh flex-1 flex-col">
+        <div className="flex min-h-[100vh] flex-1 flex-col">
           <HideOnHome>
             <TopBar userId={ctx.userId} />
           </HideOnHome>

@@ -136,7 +136,7 @@ export default async function MemoriesPage({
 
   return (
     <div className="mx-auto w-full max-w-xl pb-4 md:max-w-2xl md:py-4">
-      <HomeHeader unreadCount={ctx.unreadCount} />
+      <HomeHeader minimal />
 
       <div className="flex items-start justify-between gap-3 px-4 pb-3 pt-1">
         <div>

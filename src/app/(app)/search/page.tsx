@@ -132,7 +132,7 @@ export default async function SearchPage({
 
   return (
     <div className="mx-auto w-full max-w-xl pb-4 md:max-w-2xl md:py-4">
-      <HomeHeader unreadCount={ctx.unreadCount} />
+      <HomeHeader minimal />
 
       <div className="px-4 pb-3 pt-1">
         {!q && showcase && <SearchShowcase photo={showcase.photo} song={showcase.song} text={showcase.text} />}

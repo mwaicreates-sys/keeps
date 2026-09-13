@@ -236,7 +236,7 @@ export function PostCard({ post }: { post: FeedPost }) {
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               placeholder="Reply…"
-              className="flex-1 rounded-full bg-[#f7f5f1] px-3.5 py-2.5 text-[14px] text-[#3a362f] outline-none"
+              className="min-w-0 flex-1 rounded-full bg-[#f7f5f1] px-3.5 py-2.5 text-[14px] text-[#3a362f] outline-none"
             />
             <button type="submit" className="rounded-full bg-[#3a362f] px-4 text-[14px] font-medium text-white">
               Send

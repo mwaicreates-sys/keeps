@@ -71,7 +71,7 @@ export function AccountSwitcher() {
               onChange={(e) => setCode(e.target.value.toUpperCase())}
               placeholder="Invite code"
               maxLength={6}
-              className="flex-1 rounded-full border border-line bg-paper-raised px-3 py-2 text-center text-sm font-medium tracking-[0.2em] text-ink outline-none focus:border-accent"
+              className="min-w-0 flex-1 rounded-full border border-line bg-paper-raised px-3 py-2 text-center text-sm font-medium tracking-[0.2em] text-ink outline-none focus:border-accent"
             />
             <button
               type="submit"

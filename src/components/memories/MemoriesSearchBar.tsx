@@ -31,13 +31,13 @@ export function MemoriesSearchBar({
     <div className="mb-3 px-4">
       <form action="/memories" className="flex items-center gap-2">
         {type && <input type="hidden" name="type" value={type} />}
-        <label className="flex flex-1 items-center gap-2 rounded-full bg-white px-4 py-3 shadow-[0_1px_8px_-4px_rgba(20,18,15,0.15)]">
+        <label className="flex min-w-0 flex-1 items-center gap-2 rounded-full bg-white px-4 py-3 shadow-[0_1px_8px_-4px_rgba(20,18,15,0.15)]">
           <Search size={19} strokeWidth={1.8} className="shrink-0 text-[#a39d92]" />
           <input
             name="q"
             defaultValue={q}
             placeholder="Search memories…"
-            className="w-full bg-transparent text-[15px] text-[#3a362f] outline-none placeholder:text-[#a39d92]"
+            className="w-full min-w-0 bg-transparent text-[15px] text-[#3a362f] outline-none placeholder:text-[#a39d92]"
           />
         </label>
         <button

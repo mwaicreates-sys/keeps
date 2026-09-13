@@ -38,7 +38,6 @@ export function SearchField({ initialQuery }: { initialQuery: string }) {
       <input
         value={value}
         onChange={(e) => setValue(e.target.value)}
-        autoFocus
         placeholder="Search memories, songs, posts, games, tags…"
         className="w-full min-w-0 bg-transparent text-[15px] text-[#3a362f] outline-none placeholder:text-[#a39d92]"
       />

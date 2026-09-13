@@ -1,22 +1,18 @@
+import { Sparkles } from "lucide-react";
+
 /**
  * Shown only for the moment a route inside the authenticated shell is
  * still fetching its data — the header/nav shell (from layout.tsx)
- * stays mounted the whole time, only this content slot swaps in. Kept
- * deliberately light: a few pulsing placeholder shapes echoing the
- * page's own rhythm (a title row, then card-sized blocks), not a
- * spinner and not an animated splash — this should barely be visible
- * on a fast connection.
+ * stays mounted the whole time, only this content slot swaps in. Same
+ * sparkle mark as the splash screen (src/app/loading.tsx) and every
+ * page header, just smaller and inline rather than full-screen, so
+ * switching pages feels like the same app pausing for a beat, not a
+ * generic spinner.
  */
 export default function AppLoading() {
   return (
-    <div className="mx-auto w-full max-w-xl animate-pulse pb-4 md:max-w-2xl md:py-4" aria-hidden>
-      <div className="flex h-16 items-center justify-center px-3">
-        <div className="h-5 w-20 rounded-full bg-[#eee9e2]" />
-      </div>
-      <div className="space-y-2.5 px-4 pt-2">
-        <div className="h-24 rounded-2xl bg-[#eee9e2]" />
-        <div className="h-24 rounded-2xl bg-[#eee9e2]" />
-      </div>
+    <div className="flex min-h-[50vh] items-center justify-center" aria-hidden>
+      <Sparkles size={28} className="animate-pulse text-[#c2ab5a] motion-reduce:animate-none" strokeWidth={1.8} />
     </div>
   );
 }

@@ -31,18 +31,27 @@ export function BottomNav() {
             <li key={href} className="flex flex-1 items-center justify-center">
               <Link
                 href={href}
-                aria-label={label}
                 aria-current={active ? "page" : undefined}
-                className="grid place-items-center"
-                style={{ height: 44, width: 44 }}
+                className={cn(
+                  "flex flex-col items-center justify-center gap-0.5 rounded-full px-3 py-1 transition-colors",
+                  active && !primary && "bg-[#f2efe9]"
+                )}
               >
                 {primary ? (
-                  <span className="grid place-items-center rounded-full bg-[#3a362f] text-white" style={{ height: 46, width: 46 }}>
-                    <Icon size={22} strokeWidth={2.2} />
+                  <span className="grid h-9 w-9 place-items-center rounded-full bg-[#3a362f] text-white">
+                    <Icon size={20} strokeWidth={2.2} />
                   </span>
                 ) : (
-                  <Icon size={23} strokeWidth={active ? 2.3 : 2} className={active ? "text-[#3a362f]" : "text-[#716b5f]"} />
+                  <Icon size={20} strokeWidth={active ? 2.3 : 2} className={active ? "text-[#3a362f]" : "text-[#716b5f]"} />
                 )}
+                <span
+                  className={cn(
+                    "text-[10px] leading-none",
+                    active ? "font-semibold text-[#3a362f]" : "font-medium text-[#a39d92]"
+                  )}
+                >
+                  {label}
+                </span>
               </Link>
             </li>
           );
@@ -51,11 +60,19 @@ export function BottomNav() {
           <Link
             href="/profile"
             aria-current={profileActive ? "page" : undefined}
-            className="grid place-items-center"
-            style={{ height: 44, width: 44 }}
+            className={cn(
+              "flex flex-col items-center justify-center gap-0.5 rounded-full px-3 py-1 transition-colors",
+              profileActive && "bg-[#f2efe9]"
+            )}
           >
-            <span className={cn("rounded-full p-0.5", profileActive && "ring-2 ring-[#3a362f]")}>
-              <Avatar name={profile.display_name} url={profile.avatar_url} size={36} />
+            <Avatar name={profile.display_name} url={profile.avatar_url} size={20} />
+            <span
+              className={cn(
+                "text-[10px] leading-none",
+                profileActive ? "font-semibold text-[#3a362f]" : "font-medium text-[#a39d92]"
+              )}
+            >
+              Profile
             </span>
           </Link>
         </li>

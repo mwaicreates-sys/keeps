@@ -8,7 +8,7 @@ import { useToast } from "@/components/Toast";
 import { createGameSession, submitGameAnswer, updateGameSessionPrompt } from "@/services/games-client";
 import { getGameSession } from "@/services/games-read-client";
 import { prefetchMusicPool } from "@/services/music-pool-client";
-import { pickBlindRankPrompt, swapBlindRankItem, BLIND_RANK_ROUND_SIZE, type BlindRankPrompt } from "@/lib/blind-rank-prompt";
+import { pickBlindRankPrompt, swapBlindRankItem, BLIND_RANK_FETCH_SIZE, type BlindRankPrompt } from "@/lib/blind-rank-prompt";
 import { recordPlaySignal, recordPlaySignalForItems } from "@/services/play-signals-client";
 import { usePollForResult } from "@/hooks/usePollForResult";
 import { playGame } from "@/lib/play-config";
@@ -40,7 +40,7 @@ export function BlindRankRound({ session: initialSession, roundNumber }: { sessi
   const result = session.game_results?.result as Result | undefined;
 
   useEffect(() => {
-    prefetchMusicPool("album", BLIND_RANK_ROUND_SIZE, space.id);
+    prefetchMusicPool("album", BLIND_RANK_FETCH_SIZE, space.id);
   }, [space.id]);
 
   usePollForResult(session.id, answeredByMe && !result, (fresh) => setSession(fresh));

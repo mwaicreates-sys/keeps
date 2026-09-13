@@ -22,6 +22,12 @@ export type KeepDropPrompt = {
 
 export const KEEP_COUNT = 3;
 export const KEEP_DROP_ROUND_SIZE = 5;
+/** Requested pool size -- overfetched (not a literal 5) so there's room
+ * to require every card to actually have a real image, instead of
+ * accepting whatever the pool's own image-first (but not image-
+ * required) ranking hands back. Exported so prefetch call sites warm
+ * the exact same pool key this module consumes. */
+export const KEEP_DROP_FETCH_SIZE = 8;
 export const MUSIC_KINDS: readonly MusicKind[] = ["artist", "album", "track"];
 
 /** Shared by the history view (starting the first round) and the round
@@ -31,16 +37,17 @@ export async function pickKeepDropPrompt(spaceId: string): Promise<{ prompt: Kee
   // 5-item set first (kind picked at random for variety), dropping to
   // the hardcoded pack only when the pool comes up short.
   const kind = MUSIC_KINDS[Math.floor(Math.random() * MUSIC_KINDS.length)];
-  const pool = await fetchMusicPoolPrimed(kind, KEEP_DROP_ROUND_SIZE, spaceId);
+  const pool = await fetchMusicPoolPrimed(kind, KEEP_DROP_FETCH_SIZE, spaceId);
+  const withImages = pool.items.filter((i) => i.imageUrl).slice(0, KEEP_DROP_ROUND_SIZE);
 
-  if (pool.items.length === KEEP_DROP_ROUND_SIZE) {
-    const items = pool.items.map((i) => i.title);
+  if (withImages.length === KEEP_DROP_ROUND_SIZE) {
+    const items = withImages.map((i) => i.title);
     return {
       prompt: {
         items,
         category: MUSIC_CATEGORY[kind],
-        images: Object.fromEntries(pool.items.map((i) => [i.title, i.imageUrl])),
-        ids: Object.fromEntries(pool.items.map((i) => [i.title, i.id])),
+        images: Object.fromEntries(withImages.map((i) => [i.title, i.imageUrl])),
+        ids: Object.fromEntries(withImages.map((i) => [i.title, i.id])),
         kind,
       },
       topic: `Keep 3 ${kind === "artist" ? "artists" : kind === "album" ? "albums" : "songs"}`,
@@ -53,7 +60,7 @@ export async function pickKeepDropPrompt(spaceId: string): Promise<{ prompt: Kee
 /** Fire off a prefetch for every music kind so whichever one `pickKeepDropPrompt`
  * randomly picks next is already warm. */
 export function warmAllKeepDropKinds(spaceId: string) {
-  for (const k of MUSIC_KINDS) prefetchMusicPool(k, KEEP_DROP_ROUND_SIZE, spaceId);
+  for (const k of MUSIC_KINDS) prefetchMusicPool(k, KEEP_DROP_FETCH_SIZE, spaceId);
 }
 
 /** Fetch a single replacement item of the round's own kind, excluding

@@ -16,19 +16,26 @@ export type BlindRankPrompt = {
 };
 
 export const BLIND_RANK_ROUND_SIZE = 5;
+/** Requested pool size -- overfetched (not a literal 5) so there's room
+ * to require every ranked item to actually have a real cover, instead
+ * of accepting whatever the pool's own image-first (but not image-
+ * required) ranking hands back. Exported so prefetch call sites warm
+ * the exact same pool key this module consumes. */
+export const BLIND_RANK_FETCH_SIZE = 8;
 
 /** Shared by the history view (starting the first round) and the round
  * view (starting the next one), so both pick content identically. */
 export async function pickBlindRankPrompt(spaceId: string): Promise<{ prompt: BlindRankPrompt; topic: string }> {
-  const pool = await fetchMusicPoolPrimed("album", BLIND_RANK_ROUND_SIZE, spaceId);
-  if (pool.items.length === BLIND_RANK_ROUND_SIZE) {
-    const items = pool.items.map((i) => i.title);
+  const pool = await fetchMusicPoolPrimed("album", BLIND_RANK_FETCH_SIZE, spaceId);
+  const withImages = pool.items.filter((i) => i.imageUrl).slice(0, BLIND_RANK_ROUND_SIZE);
+  if (withImages.length === BLIND_RANK_ROUND_SIZE) {
+    const items = withImages.map((i) => i.title);
     return {
       prompt: {
         items,
         category: MUSIC_CATEGORY.album,
-        images: Object.fromEntries(pool.items.map((i) => [i.title, i.imageUrl])),
-        ids: Object.fromEntries(pool.items.map((i) => [i.title, i.id])),
+        images: Object.fromEntries(withImages.map((i) => [i.title, i.imageUrl])),
+        ids: Object.fromEntries(withImages.map((i) => [i.title, i.id])),
       },
       topic: "Rank these albums",
     };

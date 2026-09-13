@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useSession } from "@/components/SessionProvider";
 import { prefetchMusicPool } from "@/services/music-pool-client";
+import { CHOICE_POOL_SIZE } from "@/lib/choice-prompt";
 
 /**
  * Warms the pools every game's history page prefetches on its own
@@ -16,7 +17,7 @@ export function PlayHomePrefetch() {
   const { space } = useSession();
 
   useEffect(() => {
-    prefetchMusicPool("artist", 2, space.id); // This or That / Guess Mine
+    prefetchMusicPool("artist", CHOICE_POOL_SIZE, space.id); // This or That / Guess Mine
     prefetchMusicPool("album", 5, space.id); // Blind Rank / Keep 3 Drop 2 (one of its 3 kinds)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

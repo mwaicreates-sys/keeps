@@ -8,7 +8,7 @@ import { useToast } from "@/components/Toast";
 import { createGameSession, submitGameAnswer, updateGameSessionPrompt, type GameType } from "@/services/games-client";
 import { getGameSession } from "@/services/games-read-client";
 import { prefetchMusicPool } from "@/services/music-pool-client";
-import { pickChoicePrompt, type ChoicePrompt } from "@/lib/choice-prompt";
+import { pickChoicePrompt, CHOICE_POOL_SIZE, type ChoicePrompt } from "@/lib/choice-prompt";
 import { recordPlaySignal, recordPlaySignalForItems } from "@/services/play-signals-client";
 import { usePollForResult } from "@/hooks/usePollForResult";
 import { playGame } from "@/lib/play-config";
@@ -56,7 +56,7 @@ export function ChoiceGameRound({
 
   // Warm the *next* round's pool while this one's being played.
   useEffect(() => {
-    prefetchMusicPool("artist", 2, space.id);
+    prefetchMusicPool("artist", CHOICE_POOL_SIZE, space.id);
   }, [space.id]);
 
   // While waiting on the partner, poll for the result so it appears

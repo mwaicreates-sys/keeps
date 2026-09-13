@@ -2,6 +2,13 @@ import { fetchMusicPool, fetchMusicPoolPrimed } from "@/services/music-pool-clie
 import { MUSIC_CATEGORY } from "@/lib/play-music-categories";
 import { THIS_OR_THAT_PACK, GUESS_MINE_PACK, randomFrom } from "@/lib/game-prompts";
 
+/** Requested pool size for a 2-item matchup -- overfetched (not a
+ * literal 2) so there's room to require both sides to actually have an
+ * image instead of accepting whatever the pool's own image-first (but
+ * not image-required) ranking hands back. Exported so every prefetch
+ * call site warms the exact same pool key this module will consume. */
+export const CHOICE_POOL_SIZE = 6;
+
 export type ChoicePrompt = {
   topic: string;
   category: string;
@@ -31,9 +38,19 @@ export async function pickChoicePrompt(
   // real, image-first artist matchup first. Only when the pool comes up
   // short (live providers AND Keeps' own dropped songs both had nothing
   // usable) does it drop to the hardcoded pack -- last resort.
-  const pool = excludeIds?.length ? await fetchMusicPool("artist", 2, spaceId, excludeIds) : await fetchMusicPoolPrimed("artist", 2, spaceId);
-  if (pool.items.length === 2) {
-    const [a, b] = pool.items;
+  //
+  // Overfetch (request more than the 2 we need) rather than asking for
+  // exactly 2 -- the pool itself is image-first but not image-*required*,
+  // so a literal count-of-2 request can come back with one imaged item
+  // and one that resolved no image at all, which would otherwise render
+  // as a real photo next to a permanently-stuck "?" placeholder. Only a
+  // pair where BOTH sides have a real image counts as a visual matchup.
+  const pool = excludeIds?.length
+    ? await fetchMusicPool("artist", CHOICE_POOL_SIZE, spaceId, excludeIds)
+    : await fetchMusicPoolPrimed("artist", CHOICE_POOL_SIZE, spaceId);
+  const withImages = pool.items.filter((i) => i.imageUrl);
+  if (withImages.length >= 2) {
+    const [a, b] = withImages;
     return {
       topic: `${a.title} or ${b.title}`,
       category: MUSIC_CATEGORY.artist,
@@ -41,7 +58,7 @@ export async function pickChoicePrompt(
       optionB: b.title,
       imageA: a.imageUrl,
       imageB: b.imageUrl,
-      items: pool.items.map((i) => ({ id: i.id, title: i.title })),
+      items: [a, b].map((i) => ({ id: i.id, title: i.title })),
     };
   }
 

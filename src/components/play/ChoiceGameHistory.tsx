@@ -7,7 +7,7 @@ import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
 import { createGameSession } from "@/services/games-client";
 import { prefetchMusicPool } from "@/services/music-pool-client";
-import { pickChoicePrompt } from "@/lib/choice-prompt";
+import { pickChoicePrompt, CHOICE_POOL_SIZE } from "@/lib/choice-prompt";
 import { getErrorMessage, timeAgo } from "@/lib/utils";
 import { GameHeader } from "@/components/play/GameHeader";
 import { EmptyState } from "@/components/EmptyState";
@@ -44,7 +44,7 @@ export function ChoiceGameHistory({
   // Warm the pool as soon as this page opens, so even the first tap of
   // the CTA doesn't wait on a cold provider request.
   useEffect(() => {
-    prefetchMusicPool("artist", 2, space.id);
+    prefetchMusicPool("artist", CHOICE_POOL_SIZE, space.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Archive, PlusCircle, Gamepad2, CircleUserRound, LogOut } from "lucide-react";
+import { Home, Archive, PlusCircle, CircleUserRound, LogOut } from "lucide-react";
 import { signOut } from "@/services/auth-client";
 import { useRouter } from "next/navigation";
 
@@ -10,7 +10,6 @@ const items = [
   { href: "/home", label: "Home", icon: Home },
   { href: "/memories", label: "Memories", icon: Archive },
   { href: "/drop", label: "Drop", icon: PlusCircle },
-  { href: "/play", label: "Games", icon: Gamepad2 },
   { href: "/profile", label: "Profile", icon: CircleUserRound },
 ] as const;
 

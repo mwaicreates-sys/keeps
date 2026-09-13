@@ -342,6 +342,7 @@ export type Database = {
           game_type: string
           id: string
           questions: Json
+          questions_version: number
           run_date: string
           space_id: string
           topic: string | null
@@ -352,6 +353,7 @@ export type Database = {
           game_type: string
           id?: string
           questions?: Json
+          questions_version?: number
           run_date: string
           space_id: string
           topic?: string | null
@@ -362,6 +364,7 @@ export type Database = {
           game_type?: string
           id?: string
           questions?: Json
+          questions_version?: number
           run_date?: string
           space_id?: string
           topic?: string | null

@@ -40,15 +40,47 @@ function randomKind<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+/** One log line per question/item-set generation attempt -- this is
+ * the run-scoped diagnostic the pool-level "[play/music-pool]"/
+ * "[play/movie-pool]" logs (in content-pool-server.ts, which already
+ * fire correctly for the in-process path) don't capture on their own:
+ * whether THIS generation attempt actually used the live provider or
+ * fell back to a hardcoded pack. Never logs a token/secret -- only
+ * counts and public catalog titles. */
+function logQuestionGeneration(entry: {
+  gameType: string;
+  kind: string;
+  requestedCount: number;
+  poolProvider: string;
+  candidateCount: number;
+  withImagesCount: number;
+  usedFallback: boolean;
+  durationMs: number;
+}) {
+  console.log("[play/daily-run-question]", JSON.stringify(entry));
+}
+
 export async function generateChoiceQuestion(
   gameType: "this_or_that" | "guess_mine",
   spaceId: string,
   excludeIds: string[]
 ): Promise<ChoicePrompt> {
+  const start = Date.now();
   const kind = randomKind(CHOICE_KINDS);
   const pool = await resolveContentPool(kind, CHOICE_POOL_SIZE, spaceId, excludeIds);
   const withImages = pool.items.filter((i) => i.imageUrl);
-  if (withImages.length >= 2) {
+  const usedFallback = withImages.length < 2;
+  logQuestionGeneration({
+    gameType,
+    kind,
+    requestedCount: CHOICE_POOL_SIZE,
+    poolProvider: pool.provider,
+    candidateCount: pool.items.length,
+    withImagesCount: withImages.length,
+    usedFallback,
+    durationMs: Date.now() - start,
+  });
+  if (!usedFallback) {
     const [a, b] = withImages;
     return {
       topic: `${a.title} or ${b.title}`,
@@ -70,10 +102,22 @@ export async function generateChoiceQuestion(
 }
 
 export async function generateBlindRankQuestion(spaceId: string): Promise<{ prompt: BlindRankPrompt; topic: string }> {
+  const start = Date.now();
   const kind = randomKind(BLIND_RANK_KINDS);
   const pool = await resolveContentPool(kind, BLIND_RANK_FETCH_SIZE, spaceId);
   const withImages = pool.items.filter((i) => i.imageUrl).slice(0, BLIND_RANK_ROUND_SIZE);
-  if (withImages.length === BLIND_RANK_ROUND_SIZE) {
+  const usedFallback = withImages.length !== BLIND_RANK_ROUND_SIZE;
+  logQuestionGeneration({
+    gameType: "blind_rank",
+    kind,
+    requestedCount: BLIND_RANK_FETCH_SIZE,
+    poolProvider: pool.provider,
+    candidateCount: pool.items.length,
+    withImagesCount: withImages.length,
+    usedFallback,
+    durationMs: Date.now() - start,
+  });
+  if (!usedFallback) {
     const items = withImages.map((i) => i.title);
     return {
       prompt: {
@@ -91,10 +135,22 @@ export async function generateBlindRankQuestion(spaceId: string): Promise<{ prom
 }
 
 export async function generateKeepDropQuestion(spaceId: string): Promise<{ prompt: KeepDropPrompt; topic: string }> {
+  const start = Date.now();
   const kind = randomKind(KEEP_DROP_KINDS);
   const pool = await resolveContentPool(kind, KEEP_DROP_FETCH_SIZE, spaceId);
   const withImages = pool.items.filter((i) => i.imageUrl).slice(0, KEEP_DROP_ROUND_SIZE);
-  if (withImages.length === KEEP_DROP_ROUND_SIZE) {
+  const usedFallback = withImages.length !== KEEP_DROP_ROUND_SIZE;
+  logQuestionGeneration({
+    gameType: "keep3_drop2",
+    kind,
+    requestedCount: KEEP_DROP_FETCH_SIZE,
+    poolProvider: pool.provider,
+    candidateCount: pool.items.length,
+    withImagesCount: withImages.length,
+    usedFallback,
+    durationMs: Date.now() - start,
+  });
+  if (!usedFallback) {
     const items = withImages.map((i) => i.title);
     return {
       prompt: {

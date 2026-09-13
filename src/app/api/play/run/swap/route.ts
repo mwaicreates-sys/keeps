@@ -111,13 +111,23 @@ export async function POST(req: NextRequest) {
     }
 
     const nextQuestions = questions.map((q, i) => (i === body.index ? nextQuestion : q));
+    // Compare-and-swap on questions_version: only applies if the row is
+    // still at the version we read it at, so two near-simultaneous
+    // swaps (or a swap racing a partner's own swap) can't silently
+    // clobber each other. Bumping the version is also what makes any
+    // OTHER client holding this run's *old* questions provably stale --
+    // their next answer submission will be refused (see
+    // /api/play/run/answer) rather than recorded against content they
+    // never actually saw.
     const { data: updated, error } = await supabase
       .from("game_runs")
-      .update({ questions: nextQuestions as unknown as Json })
+      .update({ questions: nextQuestions as unknown as Json, questions_version: run.questions_version + 1 })
       .eq("id", run.id)
+      .eq("questions_version", run.questions_version)
       .select()
-      .single();
+      .maybeSingle();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    if (!updated) return NextResponse.json({ error: "conflict_try_again" }, { status: 409 });
     return NextResponse.json({ run: updated, regenerated });
   }
 
@@ -147,10 +157,12 @@ export async function POST(req: NextRequest) {
 
   const { data: updated, error } = await supabase
     .from("game_runs")
-    .update({ questions: [nextPrompt] as unknown as Json })
+    .update({ questions: [nextPrompt] as unknown as Json, questions_version: run.questions_version + 1 })
     .eq("id", run.id)
+    .eq("questions_version", run.questions_version)
     .select()
-    .single();
+    .maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+  if (!updated) return NextResponse.json({ error: "conflict_try_again" }, { status: 409 });
   return NextResponse.json({ run: updated, regenerated: false });
 }

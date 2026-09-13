@@ -5,7 +5,15 @@ import type { RunResult } from "@/lib/game-run-result";
 import type { Json } from "@/lib/types";
 
 export type RunStartResponse = {
-  run: { id: string; game_type: string; run_date: string; topic: string | null; category: string | null; questions: Json };
+  run: {
+    id: string;
+    game_type: string;
+    run_date: string;
+    topic: string | null;
+    category: string | null;
+    questions: Json;
+    questions_version: number;
+  };
   mine: { id: string; answers: Json; completed_at: string | null } | null;
   requiredAnswerCount: number;
   partner: { id: string; display_name: string } | null;
@@ -28,6 +36,19 @@ export async function startTodayRun(spaceId: string, gameType: RunGameType): Pro
   return body as RunStartResponse;
 }
 
+/** Thrown by submitRunAnswer when the caller's copy of the run's
+ * questions is out of date (a partner's swap changed it after this
+ * player loaded the run). There is no reconciliation here on purpose --
+ * the caller should reload the page, which re-fetches today's run
+ * fresh (server-rendered) and resumes exactly where this player's own
+ * answers left off. */
+export class StaleRunError extends Error {
+  constructor() {
+    super("Today's set just updated.");
+    this.name = "StaleRunError";
+  }
+}
+
 export type RunAnswerResponse = {
   answer: { id: string; answers: unknown[]; completed_at: string | null };
   completed: boolean;
@@ -37,20 +58,36 @@ export type RunAnswerResponse = {
 /** Submits one answer -- one of 5 sequential choices, or the single
  * whole-run action for the single-action games. Always appended
  * server-side to whatever's already been answered today; the caller
- * never has to (and can't) specify a position. */
-export async function submitRunAnswer(runId: string, value: unknown): Promise<RunAnswerResponse> {
+ * never has to (and can't) specify a position.
+ *
+ * `questionsVersion` must be the version this player's copy of
+ * `run.questions` matches (from the last startTodayRun/submitRunAnswer/
+ * swapRunItem response) -- the server rejects the submission with
+ * StaleRunError if a swap has since changed the run, rather than
+ * silently recording an answer against content this player never
+ * actually saw. */
+export async function submitRunAnswer(runId: string, value: unknown, questionsVersion: number): Promise<RunAnswerResponse> {
   const res = await fetch("/api/play/run/answer", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ runId, value }),
+    body: JSON.stringify({ runId, value, questionsVersion }),
   });
   const body = await res.json().catch(() => ({}));
+  if (res.status === 409 && body.error === "stale_run") throw new StaleRunError();
   if (!res.ok) throw new Error(body.error || "Couldn't save your answer.");
   return body as RunAnswerResponse;
 }
 
 export type RunSwapResponse = {
-  run: { id: string; game_type: string; run_date: string; topic: string | null; category: string | null; questions: Json };
+  run: {
+    id: string;
+    game_type: string;
+    run_date: string;
+    topic: string | null;
+    category: string | null;
+    questions: Json;
+    questions_version: number;
+  };
   regenerated: boolean;
 };
 
@@ -59,8 +96,9 @@ export type RunSwapResponse = {
  * in place, without ever creating a new run or counting as an answer.
  * Throws with a recognizable message if the partner has already
  * completed the run (their answer is locked against the current item
- * set) or there's nothing left to swap (the hardcoded-pack fallback
- * has no real ids). */
+ * set), the run changed underneath this request (rare -- retry), or
+ * there's nothing left to swap (the hardcoded-pack fallback has no
+ * real ids). */
 export async function swapRunItem(
   input:
     | { runId: string; kind: "choice"; index: number; side: "A" | "B" }

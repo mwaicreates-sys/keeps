@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Check, HelpCircle } from "lucide-react";
 import { useToast } from "@/components/Toast";
-import { submitRunAnswer, swapRunItem } from "@/services/game-runs-client";
+import { submitRunAnswer, swapRunItem, StaleRunError } from "@/services/game-runs-client";
 import { KEEP_COUNT } from "@/lib/keep-drop-prompt";
 import { playGame } from "@/lib/play-config";
 import { RoundHeader } from "@/components/play/RoundHeader";
@@ -26,6 +26,7 @@ export function KeepDropRunScreen({ initial }: { initial: RunStartResponse }) {
   // mutates the run's item set in place -- same run id, one card
   // title/image/id replaced.
   const [prompt, setPrompt] = useState<KeepDropPrompt>((initial.run.questions as unknown as KeepDropPrompt[])[0]);
+  const [questionsVersion, setQuestionsVersion] = useState(initial.run.questions_version);
   const isVisual = !!prompt.images;
 
   const priorKept = (initial.mine?.answers as { kept: string[] }[] | undefined)?.[0]?.kept;
@@ -52,6 +53,7 @@ export function KeepDropRunScreen({ initial }: { initial: RunStartResponse }) {
       const res = await swapRunItem({ runId: initial.run.id, kind: "keep3_drop2", item });
       const nextPrompt = (res.run.questions as unknown as KeepDropPrompt[])[0];
       setPrompt(nextPrompt);
+      setQuestionsVersion(res.run.questions_version);
       setKept((prev) => prev.filter((i) => i !== item));
     } catch (err) {
       show(getErrorMessage(err, "Couldn't swap this card. Your partner may have already finished today's run."), "error");
@@ -64,10 +66,15 @@ export function KeepDropRunScreen({ initial }: { initial: RunStartResponse }) {
     if (kept.length !== KEEP_COUNT) return;
     setSubmitting(true);
     try {
-      const res = await submitRunAnswer(initial.run.id, { kept });
+      const res = await submitRunAnswer(initial.run.id, { kept }, questionsVersion);
       setCompleted(true);
       if (res.result) setResult(res.result);
     } catch (err) {
+      if (err instanceof StaleRunError) {
+        show("Today's set just updated -- refreshing…", "error");
+        window.location.reload();
+        return;
+      }
       show(getErrorMessage(err, "Couldn't submit your picks."), "error");
     } finally {
       setSubmitting(false);

@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { RotateCcw, HelpCircle } from "lucide-react";
 import { useToast } from "@/components/Toast";
-import { submitRunAnswer, swapRunItem } from "@/services/game-runs-client";
+import { submitRunAnswer, swapRunItem, StaleRunError } from "@/services/game-runs-client";
 import { playGame } from "@/lib/play-config";
 import { RoundHeader } from "@/components/play/RoundHeader";
 import { RoundTagline } from "@/components/play/RoundTagline";
@@ -31,6 +31,7 @@ export function BlindRankRunScreen({ initial }: { initial: RunStartResponse }) {
   // mutates the run's item set in place -- same run id, one item title/
   // image/id replaced.
   const [prompt, setPrompt] = useState<BlindRankPrompt>((initial.run.questions as unknown as BlindRankPrompt[])[0]);
+  const [questionsVersion, setQuestionsVersion] = useState(initial.run.questions_version);
 
   const priorRanking = (initial.mine?.answers as { ranking: Record<string, number> }[] | undefined)?.[0]?.ranking;
   const [order, setOrder] = useState<string[]>(priorRanking ? Object.keys(priorRanking).sort((a, b) => priorRanking[a] - priorRanking[b]) : []);
@@ -53,6 +54,7 @@ export function BlindRankRunScreen({ initial }: { initial: RunStartResponse }) {
     try {
       const res = await swapRunItem({ runId: initial.run.id, kind: "blind_rank", item });
       setPrompt((res.run.questions as unknown as BlindRankPrompt[])[0]);
+      setQuestionsVersion(res.run.questions_version);
     } catch (err) {
       show(getErrorMessage(err, "Couldn't swap this item. Your partner may have already finished today's run."), "error");
     } finally {
@@ -71,10 +73,15 @@ export function BlindRankRunScreen({ initial }: { initial: RunStartResponse }) {
       order.forEach((item, i) => {
         ranking[item] = i + 1;
       });
-      const res = await submitRunAnswer(initial.run.id, { ranking });
+      const res = await submitRunAnswer(initial.run.id, { ranking }, questionsVersion);
       setCompleted(true);
       if (res.result) setResult(res.result);
     } catch (err) {
+      if (err instanceof StaleRunError) {
+        show("Today's set just updated -- refreshing…", "error");
+        window.location.reload();
+        return;
+      }
       show(getErrorMessage(err, "Couldn't submit your ranking."), "error");
     } finally {
       setSubmitting(false);

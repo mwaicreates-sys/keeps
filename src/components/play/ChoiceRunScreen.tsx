@@ -4,7 +4,7 @@ import { useState } from "react";
 import { HelpCircle } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
-import { submitRunAnswer, swapRunItem } from "@/services/game-runs-client";
+import { submitRunAnswer, swapRunItem, StaleRunError } from "@/services/game-runs-client";
 import { sourceForKind } from "@/lib/play-content-categories";
 import { recordPlaySignal } from "@/services/play-signals-client";
 import { playGame } from "@/lib/play-config";
@@ -41,6 +41,7 @@ export function ChoiceRunScreen({ gameType, slug, initial }: { gameType: "this_o
   // mutates one question in place -- the run itself is unchanged
   // (same id, same other 4 questions), just this one entry replaced.
   const [questions, setQuestions] = useState<ChoicePrompt[]>(initial.run.questions as unknown as ChoicePrompt[]);
+  const [questionsVersion, setQuestionsVersion] = useState(initial.run.questions_version);
   const [answers, setAnswers] = useState<string[]>(myPriorAnswers);
   const [selected, setSelected] = useState<string | null>(null);
   const [advancing, setAdvancing] = useState(false);
@@ -61,7 +62,7 @@ export function ChoiceRunScreen({ gameType, slug, initial }: { gameType: "this_o
     }
     setAdvancing(true);
     try {
-      const res = await submitRunAnswer(initial.run.id, { choice: value });
+      const res = await submitRunAnswer(initial.run.id, { choice: value }, questionsVersion);
       // Brief, deliberate pause so the selection ring/feedback is
       // visible before the screen moves on -- per the "~250-450ms
       // transition" rule, not an artificial network delay.
@@ -74,6 +75,15 @@ export function ChoiceRunScreen({ gameType, slug, initial }: { gameType: "this_o
         if (res.result) setResult(res.result);
       }
     } catch (err) {
+      if (err instanceof StaleRunError) {
+        // A swap changed today's set after this player loaded it --
+        // never silently record an answer against stale content.
+        // Reloading re-fetches the run fresh and resumes exactly where
+        // this player's already-submitted answers left off.
+        show("Today's set just updated -- refreshing…", "error");
+        window.location.reload();
+        return;
+      }
       show(getErrorMessage(err, "Couldn't save your answer."), "error");
       setSelected(null);
       setAdvancing(false);
@@ -92,6 +102,7 @@ export function ChoiceRunScreen({ gameType, slug, initial }: { gameType: "this_o
       const res = await swapRunItem({ runId: initial.run.id, kind: "choice", index: currentIndex, side });
       const nextQuestions = res.run.questions as unknown as ChoicePrompt[];
       setQuestions(nextQuestions);
+      setQuestionsVersion(res.run.questions_version);
     } catch (err) {
       show(getErrorMessage(err, "Couldn't swap this. Your partner may have already finished today's run."), "error");
     } finally {

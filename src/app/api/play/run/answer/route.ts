@@ -27,6 +27,17 @@ const GAME_LABEL: Record<string, string> = {
  * notification is created for the partner (who's been waiting) so
  * they find out results are ready without having to reopen the game
  * speculatively.
+ *
+ * Requires the client to present the `questionsVersion` its copy of
+ * `run.questions` matches (returned by /api/play/run/start and by
+ * every prior answer/swap response). A swap bumps that version -- if
+ * it doesn't match the run's *current* version, this player's local
+ * question set is stale (a swap happened after they loaded it) and
+ * the answer is refused rather than silently recorded against content
+ * they never actually saw. This is the server-side guarantee behind
+ * "the comparison must never compare an old option set against a new
+ * one": every recorded answer is provably against the run's current
+ * questions at the moment it was submitted.
  */
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
@@ -35,11 +46,16 @@ export async function POST(req: NextRequest) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
 
-  const body = (await req.json().catch(() => null)) as { runId?: string; value?: unknown } | null;
-  if (!body?.runId || body.value === undefined) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+  const body = (await req.json().catch(() => null)) as { runId?: string; value?: unknown; questionsVersion?: number } | null;
+  if (!body?.runId || body.value === undefined || typeof body.questionsVersion !== "number") {
+    return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+  }
 
   const { data: run } = await supabase.from("game_runs").select("*").eq("id", body.runId).maybeSingle();
   if (!run || !isRunGameType(run.game_type)) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  if (run.questions_version !== body.questionsVersion) {
+    return NextResponse.json({ error: "stale_run", currentVersion: run.questions_version }, { status: 409 });
+  }
   const gameType = run.game_type;
   const required = requiredAnswerCount(gameType);
 

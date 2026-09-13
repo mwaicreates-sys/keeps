@@ -2,9 +2,12 @@ import { createClient } from "@/lib/supabase/server";
 import { resolveTimeZone, localDateString } from "@/lib/timezone";
 import { generateChoiceQuestion, generateBlindRankQuestion, generateKeepDropQuestion } from "@/lib/run-content-generator";
 import { pickTop5Prompt } from "@/lib/top5-prompt";
+import { sourceForKind } from "@/lib/play-content-categories";
 import { requiredAnswerCount, RUN_GAME_TYPES, type RunGameType } from "@/lib/game-run-types";
 import { computeRunResult, type RunResult } from "@/lib/game-run-result";
 import type { ChoicePrompt } from "@/lib/choice-prompt";
+import type { BlindRankPrompt } from "@/lib/blind-rank-prompt";
+import type { KeepDropPrompt } from "@/lib/keep-drop-prompt";
 import type { Tables, Json } from "@/lib/types";
 
 export type GameRunRow = Tables<"game_runs">;
@@ -96,6 +99,31 @@ async function generateQuestions(gameType: RunGameType, spaceId: string): Promis
   return { questions: [p], topic: p.topic, category: p.category };
 }
 
+/** Safe (no secrets, just public catalog titles/counts) per-item
+ * summary of a freshly generated run's final question set -- logged
+ * once per new run so it's possible to prove from server logs alone
+ * that a real run used musicbrainz/listenbrainz/tmdb and not a silent
+ * fallback to the hardcoded pack. */
+function summarizeGeneratedQuestions(gameType: RunGameType, questions: unknown[]): { title: string; kind: string; source: string; hasImage: boolean }[] {
+  if (gameType === "this_or_that" || gameType === "guess_mine") {
+    return (questions as ChoicePrompt[]).flatMap((q) => [
+      { title: q.optionA, kind: q.kind ?? "fallback", source: q.kind ? sourceForKind(q.kind) : "hardcoded_pack", hasImage: !!q.imageA },
+      { title: q.optionB, kind: q.kind ?? "fallback", source: q.kind ? sourceForKind(q.kind) : "hardcoded_pack", hasImage: !!q.imageB },
+    ]);
+  }
+  if (gameType === "blind_rank" || gameType === "keep3_drop2") {
+    const prompt = (questions as (BlindRankPrompt | KeepDropPrompt)[])[0];
+    return prompt.items.map((item) => ({
+      title: item,
+      kind: prompt.kind ?? "fallback",
+      source: prompt.kind ? sourceForKind(prompt.kind) : "hardcoded_pack",
+      hasImage: !!prompt.images?.[item],
+    }));
+  }
+  // top5 -- free-text list, nothing provider-backed to summarize.
+  return [];
+}
+
 /**
  * The single entry point for "today's run" -- returns the existing row
  * if one already exists for this space+game_type+local-day (whether
@@ -112,7 +140,9 @@ export async function getOrCreateTodayRun(spaceId: string, gameType: RunGameType
   const existing = await getExistingRun(spaceId, gameType, runDate);
   if (existing) return existing;
 
+  const genStart = Date.now();
   const { questions, topic, category } = await generateQuestions(gameType, spaceId);
+  const generationMs = Date.now() - genStart;
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("game_runs")
@@ -129,6 +159,20 @@ export async function getOrCreateTodayRun(spaceId: string, gameType: RunGameType
     }
     throw error;
   }
+
+  console.log(
+    "[play/daily-run]",
+    JSON.stringify({
+      runId: data.id,
+      spaceId,
+      gameType,
+      runDate,
+      questionCount: questions.length,
+      generationMs,
+      items: summarizeGeneratedQuestions(gameType, questions),
+    })
+  );
+
   return data;
 }
 

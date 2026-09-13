@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
-import { submitRunAnswer } from "@/services/game-runs-client";
+import { submitRunAnswer, StaleRunError } from "@/services/game-runs-client";
 import { saveTop5List } from "@/services/top5-client";
 import { playGame } from "@/lib/play-config";
 import { RoundHeader } from "@/components/play/RoundHeader";
@@ -37,7 +37,7 @@ export function Top5RunScreen({ initial }: { initial: RunStartResponse }) {
     }
     setSubmitting(true);
     try {
-      const res = await submitRunAnswer(initial.run.id, { items: filled });
+      const res = await submitRunAnswer(initial.run.id, { items: filled }, initial.run.questions_version);
       // sessionId intentionally omitted: game_runs rows aren't
       // game_sessions rows, and top5_lists.session_id's FK points at
       // game_sessions -- passing the run's id would violate it. The
@@ -46,6 +46,11 @@ export function Top5RunScreen({ initial }: { initial: RunStartResponse }) {
       setCompleted(true);
       if (res.result) setResult(res.result);
     } catch (err) {
+      if (err instanceof StaleRunError) {
+        show("Today's set just updated -- refreshing…", "error");
+        window.location.reload();
+        return;
+      }
       show(getErrorMessage(err, "Couldn't submit your list."), "error");
     } finally {
       setSubmitting(false);

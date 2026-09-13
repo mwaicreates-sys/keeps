@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getArtistPlayItems, getAlbumPlayItems, getTrackPlayItems, type MusicFetchResult } from "@/services/play-providers/musicbrainz";
 import { getKeepsMusicItems } from "@/services/play-providers/keeps-music";
+import { getFamiliarityProfileSafe, type FamiliarityProfile } from "@/services/play-providers/familiarity";
 import { MUSIC_CATEGORY } from "@/lib/play-music-categories";
 import type { PlayItem, PlayPool } from "@/services/play-providers/types";
 
@@ -28,10 +29,10 @@ async function getRecentlyUsedIds(spaceId: string, category: string): Promise<Se
   return ids;
 }
 
-async function fetchByKind(kind: Kind, count: number, exclude: Set<string>): Promise<MusicFetchResult> {
-  if (kind === "artist") return getArtistPlayItems(count, exclude);
-  if (kind === "album") return getAlbumPlayItems(count, exclude);
-  return getTrackPlayItems(count, exclude);
+async function fetchByKind(kind: Kind, count: number, exclude: Set<string>, profile: FamiliarityProfile): Promise<MusicFetchResult> {
+  if (kind === "artist") return getArtistPlayItems(count, exclude, profile);
+  if (kind === "album") return getAlbumPlayItems(count, exclude, profile);
+  return getTrackPlayItems(count, exclude, profile);
 }
 
 /** Server-side only -- verification-era logging of the real fallback
@@ -58,13 +59,24 @@ export async function GET(req: NextRequest) {
   const kind = params.get("kind") as Kind | null;
   const count = Math.min(10, Math.max(1, Number(params.get("count")) || 2));
   const spaceId = params.get("spaceId");
+  // Extra ids to exclude beyond recent history -- used by the "Don't
+  // know this" / swap action so a just-rejected item can't come right
+  // back as its own replacement.
+  const excludeIdsParam = params.get("excludeIds");
 
   if (!kind || !["artist", "album", "track"].includes(kind) || !spaceId) {
     return NextResponse.json({ items: [], provider: "none" } satisfies PlayPool, { status: 400 });
   }
 
-  const exclude = await getRecentlyUsedIds(spaceId, MUSIC_CATEGORY[kind]).catch(() => new Set<string>());
-  const { items: liveItems, listenBrainzFailed, musicBrainzFailed } = await fetchByKind(kind, count, exclude);
+  const [historyExclude, profile] = await Promise.all([
+    getRecentlyUsedIds(spaceId, MUSIC_CATEGORY[kind]).catch(() => new Set<string>()),
+    getFamiliarityProfileSafe(spaceId),
+  ]);
+  const exclude = new Set(historyExclude);
+  if (excludeIdsParam) {
+    for (const id of excludeIdsParam.split(",").map((s) => s.trim()).filter(Boolean)) exclude.add(id);
+  }
+  const { items: liveItems, listenBrainzFailed, musicBrainzFailed } = await fetchByKind(kind, count, exclude, profile);
 
   const items: PlayItem[] = [...liveItems];
   const satisfiedByLiveProviders = items.length >= count;

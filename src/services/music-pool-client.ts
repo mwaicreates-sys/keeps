@@ -7,15 +7,28 @@ type Kind = "artist" | "album" | "track";
 /** Calls Keeps' own /api/play/music-pool -- never Spotify/MusicBrainz
  * directly, and no credentials ever reach the browser. Always resolves
  * (never throws); an empty pool just means the caller should fall back
- * to its own local content. */
-export async function fetchMusicPool(kind: Kind, count: number, spaceId: string): Promise<PlayPool> {
+ * to its own local content. `excludeIds` additionally excludes specific
+ * item ids beyond recent history -- used by the "Don't know this" /
+ * swap action so a just-rejected item can't come right back. */
+export async function fetchMusicPool(kind: Kind, count: number, spaceId: string, excludeIds?: string[]): Promise<PlayPool> {
   try {
-    const res = await fetch(`/api/play/music-pool?kind=${kind}&count=${count}&spaceId=${encodeURIComponent(spaceId)}`);
+    const params = new URLSearchParams({ kind, count: String(count), spaceId });
+    if (excludeIds?.length) params.set("excludeIds", excludeIds.join(","));
+    const res = await fetch(`/api/play/music-pool?${params.toString()}`);
     if (!res.ok) return { items: [], provider: "none" };
     return (await res.json()) as PlayPool;
   } catch {
     return { items: [], provider: "none" };
   }
+}
+
+/** One-item replacement for the "Don't know this" / swap action --
+ * fetches a single fresh item of the same kind, excluding everything
+ * currently in the round so the swap can't just hand back the same
+ * item (or another item already shown this round). */
+export async function fetchSwapItem(kind: Kind, spaceId: string, excludeIds: string[]): Promise<PlayPool["items"][number] | null> {
+  const pool = await fetchMusicPool(kind, 1, spaceId, excludeIds);
+  return pool.items[0] ?? null;
 }
 
 /**

@@ -2,17 +2,19 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check } from "lucide-react";
+import { Check, HelpCircle } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
-import { createGameSession, submitGameAnswer } from "@/services/games-client";
+import { createGameSession, submitGameAnswer, updateGameSessionPrompt } from "@/services/games-client";
 import { getGameSession } from "@/services/games-read-client";
-import { warmAllKeepDropKinds, pickKeepDropPrompt, KEEP_COUNT, type KeepDropPrompt } from "@/lib/keep-drop-prompt";
+import { warmAllKeepDropKinds, pickKeepDropPrompt, swapKeepDropItem, KEEP_COUNT, type KeepDropPrompt } from "@/lib/keep-drop-prompt";
+import { recordPlaySignal, recordPlaySignalForItems } from "@/services/play-signals-client";
 import { playGame } from "@/lib/play-config";
 import { RoundHeader } from "@/components/play/RoundHeader";
 import { RoundTagline } from "@/components/play/RoundTagline";
 import { getErrorMessage } from "@/lib/utils";
 import type { GameSessionRow } from "@/lib/game-types";
+import type { Json } from "@/lib/types";
 
 type Result = { overlap: string[]; overlapCount: number; [userId: string]: unknown };
 
@@ -29,6 +31,7 @@ export function KeepDropRound({ session: initialSession, roundNumber }: { sessio
   const [kept, setKept] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [startingNext, setStartingNext] = useState(false);
+  const [swappingItem, setSwappingItem] = useState<string | null>(null);
 
   const prompt = session.prompt as unknown as KeepDropPrompt;
   const answeredByMe = session.game_answers.some((a) => a.user_id === userId);
@@ -61,6 +64,22 @@ export function KeepDropRound({ session: initialSession, roundNumber }: { sessio
         gameType: "keep3_drop2",
         topic: session.topic,
       });
+      if (prompt.ids) {
+        const withId = (title: string) => prompt.ids?.[title];
+        // Finishing the round proves familiarity with everything shown,
+        // not just what got kept -- see familiarity.ts: selection is
+        // engagement evidence, not the whole signal.
+        recordPlaySignalForItems(
+          prompt.items.filter(withId).map((i) => ({ id: withId(i)!, type: prompt.kind ?? "album", source: "musicbrainz" })),
+          space.id,
+          "seen"
+        );
+        recordPlaySignalForItems(
+          kept.filter(withId).map((i) => ({ id: withId(i)!, type: prompt.kind ?? "album", source: "musicbrainz" })),
+          space.id,
+          "kept"
+        );
+      }
       const fresh = await getGameSession(session.id);
       setSession(fresh as unknown as GameSessionRow);
       router.refresh();
@@ -68,6 +87,39 @@ export function KeepDropRound({ session: initialSession, roundNumber }: { sessio
       show(getErrorMessage(err, "Couldn't submit your picks."), "error");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  /** "Don't know this?" -- swaps one card, records a negative
+   * familiarity signal against it, and persists the updated prompt so a
+   * partner sees the same swap. */
+  async function swapItem(item: string) {
+    const ids = prompt.ids;
+    const itemId = ids?.[item];
+    if (!ids || !itemId || !prompt.kind) return; // hardcoded-pack fallback item -- nothing to swap in
+    setSwappingItem(item);
+    try {
+      recordPlaySignal({ spaceId: space.id, itemId, itemType: prompt.kind, source: "musicbrainz", signalType: "unknown" });
+      const replacement = await swapKeepDropItem(space.id, prompt.kind, Object.values(ids));
+      if (!replacement) {
+        show("Couldn't find a replacement right now.", "error");
+        return;
+      }
+      const items = prompt.items.map((i) => (i === item ? replacement.title : i));
+      const images = { ...prompt.images };
+      delete images[item];
+      images[replacement.title] = replacement.imageUrl;
+      const nextIds = { ...ids };
+      delete nextIds[item];
+      nextIds[replacement.title] = replacement.id;
+      const nextPrompt: KeepDropPrompt = { ...prompt, items, images, ids: nextIds };
+      await updateGameSessionPrompt({ sessionId: session.id, prompt: nextPrompt as unknown as Record<string, unknown> });
+      setSession((prev) => ({ ...prev, prompt: nextPrompt as unknown as Json }));
+      setKept((prev) => prev.filter((i) => i !== item));
+    } catch (err) {
+      show(getErrorMessage(err, "Couldn't swap this item."), "error");
+    } finally {
+      setSwappingItem(null);
     }
   }
 
@@ -140,32 +192,44 @@ export function KeepDropRound({ session: initialSession, roundNumber }: { sessio
             {prompt.items.map((item, i) => {
               const isKept = kept.includes(item);
               const image = prompt.images?.[item];
+              const canSwap = !!prompt.ids?.[item];
               return (
-                <button
+                <div
                   key={item}
-                  type="button"
-                  onClick={() => toggle(item)}
-                  className={`text-center transition ${
+                  className={`relative text-center ${
                     i === prompt.items.length - 1 && prompt.items.length % 2 === 1 ? "col-span-2 mx-auto w-1/2 min-w-[45%]" : ""
                   }`}
                 >
-                  <div className={`relative aspect-square w-full overflow-hidden rounded-[18px] bg-[#f2efe9] ${isKept ? "ring-[3px] ring-[#3a362f]" : ""}`}>
-                    {image ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={image} alt="" className={`h-full w-full object-cover transition ${!isKept && kept.length >= KEEP_COUNT ? "opacity-50" : ""}`} />
-                    ) : (
-                      <div className="h-full w-full bg-black/10" />
-                    )}
-                    <span
-                      className={`absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full border-2 border-white ${
-                        isKept ? "bg-[#c23a3a]" : "bg-white/25"
-                      }`}
+                  <button type="button" onClick={() => toggle(item)} className="block w-full transition">
+                    <div className={`relative aspect-square w-full overflow-hidden rounded-[18px] bg-[#f2efe9] ${isKept ? "ring-[3px] ring-[#3a362f]" : ""}`}>
+                      {image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={image} alt="" className={`h-full w-full object-cover transition ${!isKept && kept.length >= KEEP_COUNT ? "opacity-50" : ""}`} />
+                      ) : (
+                        <div className="h-full w-full bg-black/10" />
+                      )}
+                      <span
+                        className={`absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full border-2 border-white ${
+                          isKept ? "bg-[#c23a3a]" : "bg-white/25"
+                        }`}
+                      >
+                        {isKept && <Check size={13} className="text-white" />}
+                      </span>
+                    </div>
+                    <p className="mt-1.5 truncate text-[13px] font-bold text-[#3a362f]">{item}</p>
+                  </button>
+                  {canSwap && (
+                    <button
+                      type="button"
+                      onClick={() => swapItem(item)}
+                      disabled={swappingItem !== null}
+                      aria-label={`Don't know ${item}? Swap it`}
+                      className="absolute left-2 top-2 grid h-6 w-6 place-items-center rounded-full border-2 border-white bg-white/25 text-white disabled:opacity-50"
                     >
-                      {isKept && <Check size={13} className="text-white" />}
-                    </span>
-                  </div>
-                  <p className="mt-1.5 truncate text-[13px] font-bold text-[#3a362f]">{item}</p>
-                </button>
+                      <HelpCircle size={13} />
+                    </button>
+                  )}
+                </div>
               );
             })}
           </div>

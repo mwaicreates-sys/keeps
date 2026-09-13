@@ -1,4 +1,4 @@
-import { fetchMusicPoolPrimed } from "@/services/music-pool-client";
+import { fetchMusicPool, fetchMusicPoolPrimed } from "@/services/music-pool-client";
 import { MUSIC_CATEGORY } from "@/lib/play-music-categories";
 import { THIS_OR_THAT_PACK, GUESS_MINE_PACK, randomFrom } from "@/lib/game-prompts";
 
@@ -22,12 +22,16 @@ export type ChoicePrompt = {
  * round (starting the *next* one) views, so both always pick content the
  * same way instead of two copies drifting apart.
  */
-export async function pickChoicePrompt(gameType: "this_or_that" | "guess_mine", spaceId: string): Promise<ChoicePrompt> {
+export async function pickChoicePrompt(
+  gameType: "this_or_that" | "guess_mine",
+  spaceId: string,
+  excludeIds?: string[]
+): Promise<ChoicePrompt> {
   // Dynamic provider content is the primary source: every round tries a
   // real, image-first artist matchup first. Only when the pool comes up
   // short (live providers AND Keeps' own dropped songs both had nothing
   // usable) does it drop to the hardcoded pack -- last resort.
-  const pool = await fetchMusicPoolPrimed("artist", 2, spaceId);
+  const pool = excludeIds?.length ? await fetchMusicPool("artist", 2, spaceId, excludeIds) : await fetchMusicPoolPrimed("artist", 2, spaceId);
   if (pool.items.length === 2) {
     const [a, b] = pool.items;
     return {

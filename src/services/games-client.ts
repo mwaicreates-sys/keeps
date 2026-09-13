@@ -51,6 +51,26 @@ export async function createGameSession(input: {
   return data;
 }
 
+/** Persists a swapped-in round ("Don't know this?") to the session row
+ * itself, not just local state -- so a partner opening the same
+ * session (or a page refresh) sees the swap too, instead of the two
+ * sides silently diverging on what the round even was. Any space
+ * member may call this (same RLS as the rest of game_sessions), and
+ * it's only ever used pre-answer. */
+export async function updateGameSessionPrompt(input: {
+  sessionId: string;
+  prompt: Record<string, unknown>;
+  topic?: string;
+  category?: string;
+}) {
+  const supabase = createClient();
+  const update: { prompt: Json; topic?: string; category?: string } = { prompt: input.prompt as Json };
+  if (input.topic !== undefined) update.topic = input.topic;
+  if (input.category !== undefined) update.category = input.category;
+  const { error } = await supabase.from("game_sessions").update(update).eq("id", input.sessionId);
+  if (error) throw error;
+}
+
 export function gameLabel(type: GameType): string {
   switch (type) {
     case "this_or_that":

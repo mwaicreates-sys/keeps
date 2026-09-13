@@ -5,15 +5,17 @@ import { useRouter } from "next/navigation";
 import { HelpCircle } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
-import { createGameSession, submitGameAnswer, type GameType } from "@/services/games-client";
+import { createGameSession, submitGameAnswer, updateGameSessionPrompt, type GameType } from "@/services/games-client";
 import { getGameSession } from "@/services/games-read-client";
 import { prefetchMusicPool } from "@/services/music-pool-client";
 import { pickChoicePrompt, type ChoicePrompt } from "@/lib/choice-prompt";
+import { recordPlaySignal, recordPlaySignalForItems } from "@/services/play-signals-client";
 import { playGame } from "@/lib/play-config";
 import { RoundHeader } from "@/components/play/RoundHeader";
 import { RoundTagline } from "@/components/play/RoundTagline";
 import { getErrorMessage } from "@/lib/utils";
 import type { GameSessionRow } from "@/lib/game-types";
+import type { Json } from "@/lib/types";
 
 /**
  * The actual immersive gameplay screen for one This or That / Guess Mine
@@ -43,6 +45,7 @@ export function ChoiceGameRound({
   const [choice, setChoice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [startingNext, setStartingNext] = useState(false);
+  const [swapping, setSwapping] = useState(false);
 
   const prompt = session.prompt as unknown as ChoicePrompt;
   const answeredByMe = session.game_answers.some((a) => a.user_id === userId);
@@ -68,6 +71,10 @@ export function ChoiceGameRound({
         gameType: gameType as GameType,
         topic: session.topic,
       });
+      // Selection proves familiarity/engagement, not preference -- a
+      // separate signal from whichever option "won".
+      const chosen = prompt.items?.find((i) => i.title === value);
+      if (chosen) recordPlaySignal({ spaceId: space.id, itemId: chosen.id, itemType: "artist", source: "musicbrainz", signalType: "selected" });
       const fresh = await getGameSession(session.id);
       setSession(fresh as unknown as GameSessionRow);
       router.refresh();
@@ -76,6 +83,34 @@ export function ChoiceGameRound({
       setChoice(null);
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  /** "Don't know this?" -- swaps the whole pair (both options are tied
+   * together in a This or That matchup) rather than one card, records a
+   * negative familiarity signal against the current items, and persists
+   * the new prompt to the session so a partner opening the same round
+   * sees the same swapped content. Pre-answer only. */
+  async function swapPair() {
+    if (!prompt.items?.length) return;
+    setSwapping(true);
+    try {
+      recordPlaySignalForItems(
+        prompt.items.map((i) => ({ id: i.id, type: "artist", source: "musicbrainz" })),
+        space.id,
+        "unknown"
+      );
+      const next = await pickChoicePrompt(
+        gameType,
+        space.id,
+        prompt.items.map((i) => i.id)
+      );
+      await updateGameSessionPrompt({ sessionId: session.id, prompt: next as unknown as Record<string, unknown>, topic: next.topic, category: next.category });
+      setSession((prev) => ({ ...prev, prompt: next as unknown as Json, topic: next.topic, category: next.category }));
+    } catch (err) {
+      show(getErrorMessage(err, "Couldn't swap this round."), "error");
+    } finally {
+      setSwapping(false);
     }
   }
 
@@ -183,6 +218,14 @@ export function ChoiceGameRound({
             ))}
           </div>
           <p className="text-center text-[12.5px] text-[#a39d92]">{submitting ? "Locking it in…" : "Tap a card to choose"}</p>
+          <button
+            type="button"
+            onClick={swapPair}
+            disabled={swapping || submitting}
+            className="mx-auto block text-[12.5px] font-semibold text-[#a39d92] underline decoration-dotted underline-offset-2 disabled:opacity-50"
+          >
+            {swapping ? "Finding something else…" : "Don't know either? Swap"}
+          </button>
         </div>
       ) : (
         <div className="space-y-2.5">

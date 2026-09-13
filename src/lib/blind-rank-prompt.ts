@@ -1,4 +1,4 @@
-import { fetchMusicPoolPrimed } from "@/services/music-pool-client";
+import { fetchMusicPoolPrimed, fetchSwapItem } from "@/services/music-pool-client";
 import { MUSIC_CATEGORY } from "@/lib/play-music-categories";
 import { BLIND_RANK_PACK, randomFrom } from "@/lib/game-prompts";
 
@@ -9,6 +9,10 @@ export type BlindRankPrompt = {
    * looked up by item title so the string-keyed ranking/result logic
    * never has to change shape. */
   images?: Record<string, string | null>;
+  /** Real provider item ids, keyed by title -- only present alongside
+   * `images`. Lets the "Don't know this" swap exclude the right item
+   * and record a familiarity signal against its real id. */
+  ids?: Record<string, string>;
 };
 
 export const BLIND_RANK_ROUND_SIZE = 5;
@@ -24,10 +28,23 @@ export async function pickBlindRankPrompt(spaceId: string): Promise<{ prompt: Bl
         items,
         category: MUSIC_CATEGORY.album,
         images: Object.fromEntries(pool.items.map((i) => [i.title, i.imageUrl])),
+        ids: Object.fromEntries(pool.items.map((i) => [i.title, i.id])),
       },
       topic: "Rank these albums",
     };
   }
   const p = randomFrom(BLIND_RANK_PACK);
   return { prompt: { items: p.items, category: p.category }, topic: p.topic };
+}
+
+/** Fetch a single replacement album, excluding every id already in this
+ * round -- used by "Don't know this?" to swap out one item without
+ * regenerating the whole round. Returns null if no provider item is
+ * available (round stays as-is; nothing to swap in). */
+export async function swapBlindRankItem(
+  spaceId: string,
+  currentIds: string[]
+): Promise<{ title: string; id: string; imageUrl: string | null } | null> {
+  const replacement = await fetchSwapItem("album", spaceId, currentIds);
+  return replacement ? { title: replacement.title, id: replacement.id, imageUrl: replacement.imageUrl } : null;
 }

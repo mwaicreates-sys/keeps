@@ -2,18 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, HelpCircle } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
-import { createGameSession, submitGameAnswer } from "@/services/games-client";
+import { createGameSession, submitGameAnswer, updateGameSessionPrompt } from "@/services/games-client";
 import { getGameSession } from "@/services/games-read-client";
 import { prefetchMusicPool } from "@/services/music-pool-client";
-import { pickBlindRankPrompt, BLIND_RANK_ROUND_SIZE, type BlindRankPrompt } from "@/lib/blind-rank-prompt";
+import { pickBlindRankPrompt, swapBlindRankItem, BLIND_RANK_ROUND_SIZE, type BlindRankPrompt } from "@/lib/blind-rank-prompt";
+import { recordPlaySignal, recordPlaySignalForItems } from "@/services/play-signals-client";
 import { playGame } from "@/lib/play-config";
 import { RoundHeader } from "@/components/play/RoundHeader";
 import { RoundTagline } from "@/components/play/RoundTagline";
 import { getErrorMessage } from "@/lib/utils";
 import type { GameSessionRow } from "@/lib/game-types";
+import type { Json } from "@/lib/types";
 
 type Result = { matches: number; [userId: string]: unknown };
 
@@ -30,6 +32,7 @@ export function BlindRankRound({ session: initialSession, roundNumber }: { sessi
   const [order, setOrder] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [startingNext, setStartingNext] = useState(false);
+  const [swappingItem, setSwappingItem] = useState<string | null>(null);
 
   const prompt = session.prompt as unknown as BlindRankPrompt;
   const answeredByMe = session.game_answers.some((a) => a.user_id === userId);
@@ -63,6 +66,13 @@ export function BlindRankRound({ session: initialSession, roundNumber }: { sessi
         gameType: "blind_rank",
         topic: session.topic,
       });
+      if (prompt.ids) {
+        recordPlaySignalForItems(
+          prompt.items.filter((i) => prompt.ids?.[i]).map((i) => ({ id: prompt.ids![i], type: "album", source: "musicbrainz" })),
+          space.id,
+          "ranked"
+        );
+      }
       const fresh = await getGameSession(session.id);
       setSession(fresh as unknown as GameSessionRow);
       router.refresh();
@@ -70,6 +80,41 @@ export function BlindRankRound({ session: initialSession, roundNumber }: { sessi
       show(getErrorMessage(err, "Couldn't submit your ranking."), "error");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  /** "Don't know this?" -- swaps one item without regenerating the
+   * whole round: records a negative familiarity signal against it,
+   * fetches a single replacement of the same kind, and persists the
+   * updated prompt so a partner sees the same swap. Resets the current
+   * ranking order since indices no longer line up with a changed set. */
+  async function swapItem(item: string) {
+    const ids = prompt.ids;
+    const itemId = ids?.[item];
+    if (!ids || !itemId) return; // hardcoded-pack fallback item -- nothing to swap in
+    setSwappingItem(item);
+    try {
+      recordPlaySignal({ spaceId: space.id, itemId, itemType: "album", source: "musicbrainz", signalType: "unknown" });
+      const replacement = await swapBlindRankItem(space.id, Object.values(ids));
+      if (!replacement) {
+        show("Couldn't find a replacement right now.", "error");
+        return;
+      }
+      const items = prompt.items.map((i) => (i === item ? replacement.title : i));
+      const images = { ...prompt.images };
+      delete images[item];
+      images[replacement.title] = replacement.imageUrl;
+      const nextIds = { ...ids };
+      delete nextIds[item];
+      nextIds[replacement.title] = replacement.id;
+      const nextPrompt: BlindRankPrompt = { ...prompt, items, images, ids: nextIds };
+      await updateGameSessionPrompt({ sessionId: session.id, prompt: nextPrompt as unknown as Record<string, unknown> });
+      setSession((prev) => ({ ...prev, prompt: nextPrompt as unknown as Json }));
+      setOrder([]);
+    } catch (err) {
+      show(getErrorMessage(err, "Couldn't swap this item."), "error");
+    } finally {
+      setSwappingItem(null);
     }
   }
 
@@ -154,25 +199,37 @@ export function BlindRankRound({ session: initialSession, roundNumber }: { sessi
             {prompt.items.map((item) => {
               const rank = order.indexOf(item);
               const image = prompt.images?.[item];
+              const canSwap = !!prompt.ids?.[item];
               return (
-                <button
+                <div
                   key={item}
-                  type="button"
-                  onClick={() => tapItem(item)}
-                  className={`flex w-full items-center gap-3 rounded-2xl p-2 text-left transition ${
-                    rank >= 0 ? "bg-[#3a362f]" : "bg-[#f7f5f1]"
-                  }`}
+                  className={`flex w-full items-center gap-2 rounded-2xl p-2 transition ${rank >= 0 ? "bg-[#3a362f]" : "bg-[#f7f5f1]"}`}
                 >
-                  {image !== undefined && <ItemThumb imageUrl={image} />}
-                  <span className={`min-w-0 flex-1 truncate text-[14.5px] font-medium ${rank >= 0 ? "text-white" : "text-[#3a362f]"}`}>{item}</span>
-                  <span
-                    className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[13px] font-bold ${
-                      rank >= 0 ? "bg-white/20 text-white" : "border-2 border-[#e3ddd2] text-transparent"
-                    }`}
-                  >
-                    {rank >= 0 ? rank + 1 : "·"}
-                  </span>
-                </button>
+                  <button type="button" onClick={() => tapItem(item)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                    {image !== undefined && <ItemThumb imageUrl={image} />}
+                    <span className={`min-w-0 flex-1 truncate text-[14.5px] font-medium ${rank >= 0 ? "text-white" : "text-[#3a362f]"}`}>{item}</span>
+                    <span
+                      className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[13px] font-bold ${
+                        rank >= 0 ? "bg-white/20 text-white" : "border-2 border-[#e3ddd2] text-transparent"
+                      }`}
+                    >
+                      {rank >= 0 ? rank + 1 : "·"}
+                    </span>
+                  </button>
+                  {canSwap && (
+                    <button
+                      type="button"
+                      onClick={() => swapItem(item)}
+                      disabled={swappingItem !== null}
+                      aria-label={`Don't know ${item}? Swap it`}
+                      className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg disabled:opacity-50 ${
+                        rank >= 0 ? "text-white/70" : "text-[#a39d92]"
+                      }`}
+                    >
+                      <HelpCircle size={16} />
+                    </button>
+                  )}
+                </div>
               );
             })}
           </div>

@@ -2,7 +2,10 @@ import { mbGet } from "@/lib/musicbrainz/client";
 import { getArtistImageViaWikidata, getWikimediaImageForQid } from "@/lib/wikidata/client";
 import { getReleaseGroupCoverArt } from "@/lib/coverartarchive/client";
 import { getFreshReleases, type FreshRelease } from "@/lib/listenbrainz/client";
+import { rankByFamiliarity, type FamiliarityProfile } from "@/services/play-providers/familiarity";
 import type { PlayItem } from "@/services/play-providers/types";
+
+const NO_PROFILE: FamiliarityProfile = { familiarNames: new Set(), itemSignalScores: new Map() };
 
 /**
  * The music content flow, per provider role:
@@ -123,7 +126,8 @@ async function tryFreshReleases(): Promise<{ releases: FreshRelease[]; failed: b
 
 async function artistsFromListenBrainz(
   count: number,
-  exclude: Set<string>
+  exclude: Set<string>,
+  profile: FamiliarityProfile = NO_PROFILE
 ): Promise<{ items: PlayItem[]; failed: boolean }> {
   const { releases, failed } = await tryFreshReleases();
   const seen = new Set<string>();
@@ -137,12 +141,13 @@ async function artistsFromListenBrainz(
   }
 
   // Bounded over-fetch (not unlimited -- each candidate costs one
-  // rate-limited MusicBrainz lookup) so we have room to prefer
-  // candidates whose image actually resolved, per the image-first rule,
-  // without the round waiting on more MusicBrainz round trips than
-  // necessary.
+  // rate-limited MusicBrainz lookup) so we have room to prefer both
+  // candidates whose image actually resolved (image-first) and
+  // candidates the space is more likely to actually recognize
+  // (familiarity-first), without the round waiting on more MusicBrainz
+  // round trips than necessary.
   const shuffled = shuffle(candidates);
-  const attempted = shuffled.slice(0, Math.min(shuffled.length, count + 2));
+  const attempted = shuffled.slice(0, Math.min(shuffled.length, count + 4));
 
   const resolved = await Promise.all(
     attempted.map(async (a) => {
@@ -179,15 +184,24 @@ async function artistsFromListenBrainz(
     })
   );
 
-  // Image-first: prefer resolved candidates that actually have a photo,
-  // only falling back to photo-less ones to still fill the round.
+  // Image-first, then familiarity-first within each group: prefer
+  // resolved candidates that actually have a photo AND that the space
+  // is likely to recognize, only falling back to photo-less/less-
+  // familiar ones to still fill the round.
   const withImages = resolved.filter((i) => i.imageUrl);
   const withoutImages = resolved.filter((i) => !i.imageUrl);
-  return { items: [...withImages, ...withoutImages].slice(0, count), failed };
+  const rankedWithImages = rankByFamiliarity(withImages, profile, count);
+  const need = count - rankedWithImages.length;
+  const rankedFiller = need > 0 ? rankByFamiliarity(withoutImages, profile, need).slice(0, need) : [];
+  return { items: [...rankedWithImages, ...rankedFiller].slice(0, count), failed };
 }
 
-export async function getArtistPlayItems(count: number, exclude: Set<string> = new Set()): Promise<MusicFetchResult> {
-  const fromListenBrainz = await artistsFromListenBrainz(count, exclude);
+export async function getArtistPlayItems(
+  count: number,
+  exclude: Set<string> = new Set(),
+  profile: FamiliarityProfile = NO_PROFILE
+): Promise<MusicFetchResult> {
+  const fromListenBrainz = await artistsFromListenBrainz(count, exclude, profile);
   if (fromListenBrainz.items.length >= count) {
     return { items: fromListenBrainz.items.slice(0, count), listenBrainzFailed: fromListenBrainz.failed, musicBrainzFailed: false };
   }
@@ -202,9 +216,15 @@ export async function getArtistPlayItems(count: number, exclude: Set<string> = n
       60 * 60 * 6
     );
     const alreadyIds = new Set([...exclude, ...fromListenBrainz.items.map((i) => i.id)]);
-    const artists = (data.artists ?? [])
-      .filter((a) => !alreadyIds.has(a.id) && isUsableArtistName(a.name))
-      .slice(0, remaining);
+    const candidates = (data.artists ?? []).filter((a) => !alreadyIds.has(a.id) && isUsableArtistName(a.name));
+    // Rank before resolving images -- familiarity decides which
+    // candidates are worth spending an image lookup on, not just
+    // whichever the search happened to return first.
+    const artists = rankByFamiliarity(
+      candidates.map((a) => ({ id: a.id, title: a.name, subtitle: a.disambiguation ?? null })),
+      profile,
+      remaining
+    ).map((ranked) => candidates.find((a) => a.id === ranked.id)!);
     const extra = await Promise.all(
       artists.map(async (a) => {
         const imageUrl = await getArtistImageViaWikidata(a.id);
@@ -229,7 +249,8 @@ export async function getArtistPlayItems(count: number, exclude: Set<string> = n
 
 async function albumsFromListenBrainz(
   count: number,
-  exclude: Set<string>
+  exclude: Set<string>,
+  profile: FamiliarityProfile = NO_PROFILE
 ): Promise<{ items: PlayItem[]; failed: boolean }> {
   const { releases, failed } = await tryFreshReleases();
   const seen = new Set<string>();
@@ -244,11 +265,14 @@ async function albumsFromListenBrainz(
 
   // Cover Art Archive lookups aren't MusicBrainz-rate-limited, so we can
   // afford to walk further into the shuffled list in search of real art
-  // (image-first) before giving up and filling with art-less picks.
+  // (image-first) -- over-fetching a small multiple of `count` gives
+  // the familiarity ranker below something to actually choose between,
+  // rather than just taking whatever resolved first.
+  const overfetchCap = count * 3;
   const withImages: PlayItem[] = [];
   const withoutImages: PlayItem[] = [];
   for (const r of shuffle(candidates)) {
-    if (withImages.length >= count) break;
+    if (withImages.length >= overfetchCap) break;
     const imageUrl = await getReleaseGroupCoverArt(r.release_group_mbid!);
     const item = {
       id: r.release_group_mbid!,
@@ -264,11 +288,18 @@ async function albumsFromListenBrainz(
     if (imageUrl) withImages.push(item);
     else if (withoutImages.length < count) withoutImages.push(item);
   }
-  return { items: [...withImages, ...withoutImages].slice(0, count), failed };
+  const rankedWithImages = rankByFamiliarity(withImages, profile, count);
+  const need = count - rankedWithImages.length;
+  const rankedFiller = need > 0 ? rankByFamiliarity(withoutImages, profile, need).slice(0, need) : [];
+  return { items: [...rankedWithImages, ...rankedFiller].slice(0, count), failed };
 }
 
-export async function getAlbumPlayItems(count: number, exclude: Set<string> = new Set()): Promise<MusicFetchResult> {
-  const fromListenBrainz = await albumsFromListenBrainz(count, exclude);
+export async function getAlbumPlayItems(
+  count: number,
+  exclude: Set<string> = new Set(),
+  profile: FamiliarityProfile = NO_PROFILE
+): Promise<MusicFetchResult> {
+  const fromListenBrainz = await albumsFromListenBrainz(count, exclude, profile);
   if (fromListenBrainz.items.length >= count) {
     return { items: fromListenBrainz.items.slice(0, count), listenBrainzFailed: fromListenBrainz.failed, musicBrainzFailed: false };
   }
@@ -281,13 +312,16 @@ export async function getAlbumPlayItems(count: number, exclude: Set<string> = ne
       60 * 60 * 6
     );
     const alreadyIds = new Set([...exclude, ...fromListenBrainz.items.map((i) => i.id)]);
-    const groups = (data["release-groups"] ?? [])
-      .filter((rg) => {
-        if (alreadyIds.has(rg.id) || isGenericAlbumTitle(rg.title)) return false;
-        const artistName = rg["artist-credit"]?.map((c) => c.name).join(", ");
-        return !artistName || isUsableArtistName(artistName);
-      })
-      .slice(0, remaining);
+    const candidates = (data["release-groups"] ?? []).filter((rg) => {
+      if (alreadyIds.has(rg.id) || isGenericAlbumTitle(rg.title)) return false;
+      const artistName = rg["artist-credit"]?.map((c) => c.name).join(", ");
+      return !artistName || isUsableArtistName(artistName);
+    });
+    const groups = rankByFamiliarity(
+      candidates.map((rg) => ({ id: rg.id, title: rg.title, subtitle: rg["artist-credit"]?.map((c) => c.name).join(", ") ?? null })),
+      profile,
+      remaining
+    ).map((ranked) => candidates.find((rg) => rg.id === ranked.id)!);
     const extra = await Promise.all(
       groups.map(async (rg) => {
         const imageUrl = await getReleaseGroupCoverArt(rg.id);
@@ -314,20 +348,27 @@ export async function getAlbumPlayItems(count: number, exclude: Set<string> = ne
  * releases is album-level. Tracks stay MusicBrainz-search-only, so
  * discoverySource honestly equals source here rather than pretending a
  * discovery layer that doesn't exist for this kind. */
-export async function getTrackPlayItems(count: number, exclude: Set<string> = new Set()): Promise<MusicFetchResult> {
+export async function getTrackPlayItems(
+  count: number,
+  exclude: Set<string> = new Set(),
+  profile: FamiliarityProfile = NO_PROFILE
+): Promise<MusicFetchResult> {
   try {
     const seed = randomSeed();
     const data = await mbGet<{ recordings?: MbRecording[] }>(
       `/recording?query=${encodeURIComponent(`tag:${seed}`)}&limit=${Math.min(25, count * 6)}`,
       60 * 60 * 6
     );
-    const recordings = (data.recordings ?? [])
-      .filter((r) => {
-        if (exclude.has(r.id) || !r.releases?.length) return false;
-        const artistName = r["artist-credit"]?.map((c) => c.name).join(", ");
-        return !artistName || isUsableArtistName(artistName);
-      })
-      .slice(0, count);
+    const candidates = (data.recordings ?? []).filter((r) => {
+      if (exclude.has(r.id) || !r.releases?.length) return false;
+      const artistName = r["artist-credit"]?.map((c) => c.name).join(", ");
+      return !artistName || isUsableArtistName(artistName);
+    });
+    const recordings = rankByFamiliarity(
+      candidates.map((r) => ({ id: r.id, title: r.title, subtitle: r["artist-credit"]?.map((c) => c.name).join(", ") ?? null })),
+      profile,
+      count
+    ).map((ranked) => candidates.find((r) => r.id === ranked.id)!);
 
     const items = await Promise.all(
       recordings.map(async (rec) => {

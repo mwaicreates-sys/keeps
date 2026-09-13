@@ -14,8 +14,10 @@ export const CHOICE_POOL_SIZE = 6;
  * the visual-quiz rule's own examples. Music (artist) sits alongside
  * the new TMDb kinds; "album"/"track" are deliberately excluded here
  * (a named-entity matchup reads better for artists/movies/shows/people
- * than for individual albums/tracks -- unchanged from before). */
-const CHOICE_KINDS: ContentKind[] = ["artist", "movie", "tv", "person"];
+ * than for individual albums/tracks -- unchanged from before).
+ * Exported so the server-only daily-run generator (run-content-
+ * generator.ts) picks from the exact same kind set this module does. */
+export const CHOICE_KINDS: ContentKind[] = ["artist", "movie", "tv", "person"];
 
 /** Warms every kind pickChoicePrompt might randomly draw from, so
  * whichever one it actually picks next is already warm -- pickKeepDropPrompt

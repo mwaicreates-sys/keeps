@@ -1,29 +1,40 @@
 import { createClient } from "@/lib/supabase/server";
 import { resolveTimeZone, localDateString } from "@/lib/timezone";
-import { pickChoicePrompt, type ChoicePrompt } from "@/lib/choice-prompt";
-import { pickBlindRankPrompt } from "@/lib/blind-rank-prompt";
-import { pickKeepDropPrompt } from "@/lib/keep-drop-prompt";
+import { generateChoiceQuestion, generateBlindRankQuestion, generateKeepDropQuestion } from "@/lib/run-content-generator";
 import { pickTop5Prompt } from "@/lib/top5-prompt";
 import { requiredAnswerCount, RUN_GAME_TYPES, type RunGameType } from "@/lib/game-run-types";
 import { computeRunResult, type RunResult } from "@/lib/game-run-result";
+import type { ChoicePrompt } from "@/lib/choice-prompt";
 import type { Tables, Json } from "@/lib/types";
 
 export type GameRunRow = Tables<"game_runs">;
 export type GameRunAnswerRow = Tables<"game_run_answers">;
 
-export async function getUserTimezone(userId: string): Promise<string> {
+/**
+ * A shared run is only ever generated/keyed off ONE timezone for the
+ * whole space, never per player -- otherwise two players in different
+ * zones (or just past midnight in one of their zones) could resolve
+ * different run_dates and end up with two independently-generated
+ * runs instead of the one shared set the whole daily-run model depends
+ * on. space.timezone is that single source of truth; a brand-new space
+ * with none yet falls back to UTC (never a hardcoded region) until
+ * TimezoneSync initializes it from whichever member opens the app
+ * first (see TimezoneSync.tsx) -- from then on it's stable for the
+ * life of the space regardless of who's asking.
+ */
+export async function getSpaceTimezone(spaceId: string): Promise<string> {
   const supabase = await createClient();
-  const { data } = await supabase.from("profiles").select("timezone").eq("id", userId).maybeSingle();
+  const { data } = await supabase.from("spaces").select("timezone").eq("id", spaceId).maybeSingle();
   return resolveTimeZone(data?.timezone ?? null);
 }
 
-/** This player's local calendar date, "YYYY-MM-DD" -- the run_date a
- * new run is stamped with, and the key used to find today's existing
- * one. Per the product rule, this follows the player's own local day,
- * never a hardcoded region and never UTC pretending to be everyone's
- * day. */
-export async function getTodayRunDateForUser(userId: string): Promise<string> {
-  const tz = await getUserTimezone(userId);
+/** The space's local calendar date, "YYYY-MM-DD" -- the run_date a new
+ * run is stamped with, and the key used to find today's existing one.
+ * Both players always resolve the exact same value for the exact same
+ * space, which is what guarantees they land on the exact same
+ * game_runs row. */
+export async function getTodayRunDateForSpace(spaceId: string): Promise<string> {
+  const tz = await getSpaceTimezone(spaceId);
   return localDateString(new Date(), tz);
 }
 
@@ -49,27 +60,38 @@ export async function getRunAnswer(runId: string, userId: string): Promise<GameR
  * called once per (space, game_type, day), by whichever player opens
  * the game first that day; the unique constraint on game_runs is what
  * guarantees the *other* player gets the exact same set instead of a
- * second, independently-generated one (see createTodayRun below). */
+ * second, independently-generated one (see getOrCreateTodayRun below).
+ *
+ * Goes through run-content-generator.ts, not choice-prompt.ts/
+ * blind-rank-prompt.ts/keep-drop-prompt.ts directly -- those pick
+ * content via a client-side fetch() that has no meaning on the server
+ * (see run-content-generator.ts's own docs). This is still the exact
+ * same provider engine (MusicBrainz/TMDb via content-pool-server.ts),
+ * the exact same overfetch-and-require-images validation, and the
+ * exact same hardcoded-pack last resort -- just invoked in a way that
+ * actually runs on the server instead of silently no-op'ing. */
 async function generateQuestions(gameType: RunGameType, spaceId: string): Promise<{ questions: unknown[]; topic: string; category: string }> {
   if (gameType === "this_or_that" || gameType === "guess_mine") {
     const questions: ChoicePrompt[] = [];
     const usedIds: string[] = [];
     for (let i = 0; i < 5; i++) {
-      const q = await pickChoicePrompt(gameType, spaceId, usedIds.length ? usedIds : undefined);
+      const q = await generateChoiceQuestion(gameType, spaceId, usedIds);
       questions.push(q);
       if (q.items) usedIds.push(...q.items.map((it) => it.id));
     }
     return { questions, topic: "Today's 5", category: questions[0]?.category ?? "Mixed" };
   }
   if (gameType === "blind_rank") {
-    const { prompt, topic } = await pickBlindRankPrompt(spaceId);
+    const { prompt, topic } = await generateBlindRankQuestion(spaceId);
     return { questions: [prompt], topic, category: prompt.category };
   }
   if (gameType === "keep3_drop2") {
-    const { prompt, topic } = await pickKeepDropPrompt(spaceId);
+    const { prompt, topic } = await generateKeepDropQuestion(spaceId);
     return { questions: [prompt], topic, category: prompt.category };
   }
-  // top5
+  // top5 -- a plain random topic from the hardcoded pack, no provider
+  // involved at all (unchanged from before; there's nothing here that
+  // could have hit the same server/client bug).
   const p = await pickTop5Prompt();
   return { questions: [p], topic: p.topic, category: p.category };
 }
@@ -85,8 +107,8 @@ async function generateQuestions(gameType: RunGameType, spaceId: string): Promis
  * duplicate -- so both players always end up answering the exact same
  * questions, never independently-generated ones.
  */
-export async function getOrCreateTodayRun(spaceId: string, gameType: RunGameType, userId: string): Promise<GameRunRow> {
-  const runDate = await getTodayRunDateForUser(userId);
+export async function getOrCreateTodayRun(spaceId: string, gameType: RunGameType): Promise<GameRunRow> {
+  const runDate = await getTodayRunDateForSpace(spaceId);
   const existing = await getExistingRun(spaceId, gameType, runDate);
   if (existing) return existing;
 
@@ -135,7 +157,7 @@ export async function getBothAnswers(
  * card. */
 export async function getCompletedRunGameTypesToday(spaceId: string, userId: string): Promise<Set<RunGameType>> {
   const supabase = await createClient();
-  const runDate = await getTodayRunDateForUser(userId);
+  const runDate = await getTodayRunDateForSpace(spaceId);
   const { data: runs } = await supabase
     .from("game_runs")
     .select("id, game_type")
@@ -175,7 +197,7 @@ export async function buildRunStartPayload(spaceId: string, gameType: RunGameTyp
   const supabase = await createClient();
   const [{ data: membership }, run] = await Promise.all([
     supabase.from("space_members").select("user_id, profiles(id, display_name)").eq("space_id", spaceId),
-    getOrCreateTodayRun(spaceId, gameType, userId),
+    getOrCreateTodayRun(spaceId, gameType),
   ]);
 
   const partner =

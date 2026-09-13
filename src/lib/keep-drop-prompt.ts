@@ -29,7 +29,7 @@ export const KEEP_DROP_ROUND_SIZE = 5;
 export const KEEP_DROP_FETCH_SIZE = 8;
 export const ALL_KINDS: readonly ContentKind[] = ["artist", "album", "track", "movie", "tv", "person"];
 
-const TOPIC_BY_KIND: Record<ContentKind, string> = {
+export const TOPIC_BY_KIND: Record<ContentKind, string> = {
   artist: "Keep 3 artists",
   album: "Keep 3 albums",
   track: "Keep 3 songs",

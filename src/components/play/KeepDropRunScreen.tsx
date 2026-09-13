@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Check } from "lucide-react";
+import { Check, HelpCircle } from "lucide-react";
 import { useToast } from "@/components/Toast";
-import { submitRunAnswer } from "@/services/game-runs-client";
+import { submitRunAnswer, swapRunItem } from "@/services/game-runs-client";
 import { KEEP_COUNT } from "@/lib/keep-drop-prompt";
 import { playGame } from "@/lib/play-config";
 import { RoundHeader } from "@/components/play/RoundHeader";
@@ -21,12 +21,17 @@ const game = playGame("keep3-drop2");
  * just makes it the whole day's run instead of up to 5 per day). */
 export function KeepDropRunScreen({ initial }: { initial: RunStartResponse }) {
   const { show } = useToast();
-  const prompt = (initial.run.questions as unknown as KeepDropPrompt[])[0];
+
+  // Held in state (not derived directly from `initial`) because a swap
+  // mutates the run's item set in place -- same run id, one card
+  // title/image/id replaced.
+  const [prompt, setPrompt] = useState<KeepDropPrompt>((initial.run.questions as unknown as KeepDropPrompt[])[0]);
   const isVisual = !!prompt.images;
 
   const priorKept = (initial.mine?.answers as { kept: string[] }[] | undefined)?.[0]?.kept;
   const [kept, setKept] = useState<string[]>(priorKept ?? []);
   const [submitting, setSubmitting] = useState(false);
+  const [swappingItem, setSwappingItem] = useState<string | null>(null);
   const [completed, setCompleted] = useState(!!initial.mine?.completed_at);
   const [result, setResult] = useState<RunResult | null>(initial.result);
 
@@ -36,6 +41,23 @@ export function KeepDropRunScreen({ initial }: { initial: RunStartResponse }) {
       if (prev.length >= KEEP_COUNT) return prev;
       return [...prev, item];
     });
+  }
+
+  /** "Don't know this?" -- allowed on any card before submission
+   * (kept or not), replacing it in place. Never touches the daily
+   * answer count. */
+  async function swapItem(item: string) {
+    setSwappingItem(item);
+    try {
+      const res = await swapRunItem({ runId: initial.run.id, kind: "keep3_drop2", item });
+      const nextPrompt = (res.run.questions as unknown as KeepDropPrompt[])[0];
+      setPrompt(nextPrompt);
+      setKept((prev) => prev.filter((i) => i !== item));
+    } catch (err) {
+      show(getErrorMessage(err, "Couldn't swap this card. Your partner may have already finished today's run."), "error");
+    } finally {
+      setSwappingItem(null);
+    }
   }
 
   async function submit() {
@@ -107,10 +129,11 @@ export function KeepDropRunScreen({ initial }: { initial: RunStartResponse }) {
             {prompt.items.map((item, i) => {
               const isKept = kept.includes(item);
               const image = prompt.images?.[item];
+              const canSwap = !!prompt.ids?.[item];
               return (
                 <div
                   key={item}
-                  className={`text-center ${i === prompt.items.length - 1 && prompt.items.length % 2 === 1 ? "col-span-2 mx-auto w-1/2 min-w-[45%]" : ""}`}
+                  className={`relative text-center ${i === prompt.items.length - 1 && prompt.items.length % 2 === 1 ? "col-span-2 mx-auto w-1/2 min-w-[45%]" : ""}`}
                 >
                   <button type="button" onClick={() => toggle(item)} className="block w-full transition">
                     <div className={`relative aspect-square w-full overflow-hidden rounded-[18px] bg-[#f2efe9] ${isKept ? "ring-[3px] ring-[#3a362f]" : ""}`}>
@@ -136,6 +159,17 @@ export function KeepDropRunScreen({ initial }: { initial: RunStartResponse }) {
                     </div>
                     <p className="mt-1.5 truncate text-[13px] font-bold text-[#3a362f]">{item}</p>
                   </button>
+                  {canSwap && (
+                    <button
+                      type="button"
+                      onClick={() => swapItem(item)}
+                      disabled={swappingItem !== null}
+                      aria-label={`Don't know ${item}? Swap it`}
+                      className="absolute left-2 top-2 grid h-6 w-6 place-items-center rounded-full border-2 border-white bg-white/25 text-white disabled:opacity-50"
+                    >
+                      <HelpCircle size={13} />
+                    </button>
+                  )}
                 </div>
               );
             })}

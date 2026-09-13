@@ -28,10 +28,12 @@ export const BLIND_RANK_ROUND_SIZE = 5;
 export const BLIND_RANK_FETCH_SIZE = 8;
 
 /** Blind Rank draws from albums (music) or posters (movies/TV) -- one
- * kind at a time, ranked one card at a time, per the visual-quiz rule. */
-const BLIND_RANK_KINDS: ContentKind[] = ["album", "movie", "tv", "person"];
+ * kind at a time, ranked one card at a time, per the visual-quiz rule.
+ * Exported so the server-only daily-run generator picks from the exact
+ * same kind set this module does. */
+export const BLIND_RANK_KINDS: ContentKind[] = ["album", "movie", "tv", "person"];
 
-const TOPIC_BY_KIND: Record<ContentKind, string> = {
+export const TOPIC_BY_KIND: Record<ContentKind, string> = {
   artist: "Rank these artists",
   album: "Rank these albums",
   track: "Rank these songs",

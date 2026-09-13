@@ -19,22 +19,29 @@ import { timeAgo, cn } from "@/lib/utils";
 import { EmptyState } from "@/components/EmptyState";
 import type { Tables } from "@/lib/types";
 
+const GAME_TYPE_SLUG: Record<string, string> = {
+  this_or_that: "this-or-that",
+  top5: "top5",
+  blind_rank: "blind-rank",
+  guess_mine: "guess-mine",
+  keep3_drop2: "keep3-drop2",
+};
+
 function targetHref(n: Tables<"notifications">): string {
   const data = (n.data ?? {}) as Record<string, string>;
   if (data.postId) return `/memories/${data.postId}`;
+  // Daily-run games (runId): the base route IS the specific completed
+  // run -- there's exactly one game_runs row per space/game_type/day,
+  // so /play/<slug> deterministically opens today's run and shows
+  // results/waiting state from there. No separate result URL needed.
+  if (data.runId && data.gameType) {
+    return `/play/${GAME_TYPE_SLUG[data.gameType] ?? "this-or-that"}`;
+  }
+  // Legacy game_sessions rounds (sessionId) -- still deep-link straight
+  // to that specific round, since the base route no longer resumes
+  // old-style sessions.
   if (data.sessionId) {
-    const map: Record<string, string> = {
-      this_or_that: "this-or-that",
-      top5: "top5",
-      blind_rank: "blind-rank",
-      guess_mine: "guess-mine",
-      keep3_drop2: "keep3-drop2",
-    };
-    // Deep-link straight to the specific round -- the base game route
-    // is a launcher now, not a list, so it would just start (or
-    // resume some other) round instead of opening the one this
-    // notification is actually about.
-    return `/play/${map[data.gameType] ?? "this-or-that"}/${data.sessionId}`;
+    return `/play/${GAME_TYPE_SLUG[data.gameType] ?? "this-or-that"}/${data.sessionId}`;
   }
   if (data.fixtureId) return `/play/match-predictions/${data.fixtureId}`;
   return "/home";

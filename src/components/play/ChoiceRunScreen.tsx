@@ -4,7 +4,7 @@ import { useState } from "react";
 import { HelpCircle } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
-import { submitRunAnswer } from "@/services/game-runs-client";
+import { submitRunAnswer, swapRunItem } from "@/services/game-runs-client";
 import { sourceForKind } from "@/lib/play-content-categories";
 import { recordPlaySignal } from "@/services/play-signals-client";
 import { playGame } from "@/lib/play-config";
@@ -35,12 +35,16 @@ export function ChoiceRunScreen({ gameType, slug, initial }: { gameType: "this_o
   const { show } = useToast();
   const game = playGame(slug);
 
-  const questions = initial.run.questions as unknown as ChoicePrompt[];
   const myPriorAnswers = ((initial.mine?.answers as { choice: string }[] | undefined) ?? []).map((a) => a.choice);
 
+  // Held in state (not a plain const off `initial`) because a swap
+  // mutates one question in place -- the run itself is unchanged
+  // (same id, same other 4 questions), just this one entry replaced.
+  const [questions, setQuestions] = useState<ChoicePrompt[]>(initial.run.questions as unknown as ChoicePrompt[]);
   const [answers, setAnswers] = useState<string[]>(myPriorAnswers);
   const [selected, setSelected] = useState<string | null>(null);
   const [advancing, setAdvancing] = useState(false);
+  const [swapping, setSwapping] = useState<"A" | "B" | null>(null);
   const [completed, setCompleted] = useState(!!initial.mine?.completed_at);
   const [result, setResult] = useState<RunResult | null>(initial.result);
 
@@ -73,6 +77,25 @@ export function ChoiceRunScreen({ gameType, slug, initial }: { gameType: "this_o
       show(getErrorMessage(err, "Couldn't save your answer."), "error");
       setSelected(null);
       setAdvancing(false);
+    }
+  }
+
+  /** "Don't know this?" -- a safety valve, not a second daily
+   * allowance: replaces just the unfamiliar side where a valid
+   * same-kind, image-bearing replacement exists; regenerates the whole
+   * pair (server-side) if it doesn't, rather than leaving an invalid
+   * matchup. Never touches the daily answer count. */
+  async function swapSide(side: "A" | "B") {
+    if (swapping || selected || advancing) return;
+    setSwapping(side);
+    try {
+      const res = await swapRunItem({ runId: initial.run.id, kind: "choice", index: currentIndex, side });
+      const nextQuestions = res.run.questions as unknown as ChoicePrompt[];
+      setQuestions(nextQuestions);
+    } catch (err) {
+      show(getErrorMessage(err, "Couldn't swap this. Your partner may have already finished today's run."), "error");
+    } finally {
+      setSwapping(null);
     }
   }
 
@@ -151,39 +174,53 @@ export function ChoiceRunScreen({ gameType, slug, initial }: { gameType: "this_o
 
       {isVisual ? (
         <div className="grid grid-cols-2 gap-3">
-          {[
-            { label: question.optionA, image: question.imageA },
-            { label: question.optionB, image: question.imageB },
-          ].map(({ label, image }) => (
-            <button
-              key={label}
-              type="button"
-              onClick={() => choose(label)}
-              disabled={!!selected}
-              className={`text-center transition ${selected === label ? "scale-[0.98]" : selected ? "opacity-60" : ""}`}
-            >
-              <div
-                className={`relative aspect-square w-full overflow-hidden rounded-[22px] bg-[#f2efe9] ${selected === label ? "ring-[3px] ring-[#3a362f]" : ""}`}
-              >
-                {image ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={image} alt="" loading="eager" fetchPriority="high" className="h-full w-full object-cover" />
-                ) : (
-                  <div className="grid h-full w-full place-items-center text-[#a39d92]">
-                    <HelpCircle size={28} />
-                  </div>
-                )}
-                <span
-                  className={`absolute right-2.5 top-2.5 grid h-6 w-6 place-items-center rounded-full border-2 border-white ${
-                    selected === label ? "bg-[#3a362f]" : "bg-white/25"
-                  }`}
+          {(["A", "B"] as const).map((side) => {
+            const label = side === "A" ? question.optionA : question.optionB;
+            const image = side === "A" ? question.imageA : question.imageB;
+            const canSwap = !!question.items;
+            return (
+              <div key={side} className="relative text-center">
+                <button
+                  type="button"
+                  onClick={() => choose(label)}
+                  disabled={!!selected || swapping !== null}
+                  className={`block w-full transition ${selected === label ? "scale-[0.98]" : selected ? "opacity-60" : ""}`}
                 >
-                  {selected === label && <span className="h-2 w-2 rounded-full bg-white" />}
-                </span>
+                  <div
+                    className={`relative aspect-square w-full overflow-hidden rounded-[22px] bg-[#f2efe9] ${selected === label ? "ring-[3px] ring-[#3a362f]" : ""} ${swapping === side ? "opacity-50" : ""}`}
+                  >
+                    {image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={image} alt="" loading="eager" fetchPriority="high" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="grid h-full w-full place-items-center text-[#a39d92]">
+                        <HelpCircle size={28} />
+                      </div>
+                    )}
+                    <span
+                      className={`absolute right-2.5 top-2.5 grid h-6 w-6 place-items-center rounded-full border-2 border-white ${
+                        selected === label ? "bg-[#3a362f]" : "bg-white/25"
+                      }`}
+                    >
+                      {selected === label && <span className="h-2 w-2 rounded-full bg-white" />}
+                    </span>
+                  </div>
+                  <p className="mt-2 truncate text-[14px] font-bold text-[#3a362f]">{label}</p>
+                </button>
+                {canSwap && (
+                  <button
+                    type="button"
+                    onClick={() => swapSide(side)}
+                    disabled={swapping !== null || !!selected}
+                    aria-label={`Don't know ${label}? Swap it`}
+                    className="absolute left-2 top-2 grid h-6 w-6 place-items-center rounded-full border-2 border-white bg-white/25 text-white disabled:opacity-50"
+                  >
+                    <HelpCircle size={13} />
+                  </button>
+                )}
               </div>
-              <p className="mt-2 truncate text-[14px] font-bold text-[#3a362f]">{label}</p>
-            </button>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="space-y-2.5">

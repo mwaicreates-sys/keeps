@@ -48,3 +48,31 @@ export async function submitRunAnswer(runId: string, value: unknown): Promise<Ru
   if (!res.ok) throw new Error(body.error || "Couldn't save your answer.");
   return body as RunAnswerResponse;
 }
+
+export type RunSwapResponse = {
+  run: { id: string; game_type: string; run_date: string; topic: string | null; category: string | null; questions: Json };
+  regenerated: boolean;
+};
+
+/** "Don't know this?" -- a safety valve, not a second daily allowance:
+ * replaces one unfamiliar item in today's already-generated run,
+ * in place, without ever creating a new run or counting as an answer.
+ * Throws with a recognizable message if the partner has already
+ * completed the run (their answer is locked against the current item
+ * set) or there's nothing left to swap (the hardcoded-pack fallback
+ * has no real ids). */
+export async function swapRunItem(
+  input:
+    | { runId: string; kind: "choice"; index: number; side: "A" | "B" }
+    | { runId: string; kind: "blind_rank" | "keep3_drop2"; item: string }
+): Promise<RunSwapResponse> {
+  const res = await fetch("/api/play/run/swap", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || "Couldn't swap this item.");
+  if (!body.run) throw new Error("No replacement available right now.");
+  return body as RunSwapResponse;
+}

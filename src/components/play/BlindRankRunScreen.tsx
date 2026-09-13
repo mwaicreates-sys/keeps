@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, HelpCircle } from "lucide-react";
 import { useToast } from "@/components/Toast";
-import { submitRunAnswer } from "@/services/game-runs-client";
+import { submitRunAnswer, swapRunItem } from "@/services/game-runs-client";
 import { playGame } from "@/lib/play-config";
 import { RoundHeader } from "@/components/play/RoundHeader";
 import { RoundTagline } from "@/components/play/RoundTagline";
@@ -26,16 +26,38 @@ const game = playGame("blind-rank");
  */
 export function BlindRankRunScreen({ initial }: { initial: RunStartResponse }) {
   const { show } = useToast();
-  const prompt = (initial.run.questions as unknown as BlindRankPrompt[])[0];
+
+  // Held in state (not derived directly from `initial`) because a swap
+  // mutates the run's item set in place -- same run id, one item title/
+  // image/id replaced.
+  const [prompt, setPrompt] = useState<BlindRankPrompt>((initial.run.questions as unknown as BlindRankPrompt[])[0]);
 
   const priorRanking = (initial.mine?.answers as { ranking: Record<string, number> }[] | undefined)?.[0]?.ranking;
   const [order, setOrder] = useState<string[]>(priorRanking ? Object.keys(priorRanking).sort((a, b) => priorRanking[a] - priorRanking[b]) : []);
   const [submitting, setSubmitting] = useState(false);
+  const [swappingItem, setSwappingItem] = useState<string | null>(null);
   const [completed, setCompleted] = useState(!!initial.mine?.completed_at);
   const [result, setResult] = useState<RunResult | null>(initial.result);
 
   function tapItem(item: string) {
     setOrder((prev) => (prev.includes(item) ? prev.filter((i) => i !== item) : [...prev, item]));
+  }
+
+  /** "Don't know this?" -- only offered before the item has been added
+   * to the ranking (tapped into `order`), per the rule: replace it
+   * without consuming a rank position. Mutates the run's shared item
+   * set in place; never touches the daily answer count. */
+  async function swapItem(item: string) {
+    if (order.includes(item)) return; // already ranked -- not swappable anymore
+    setSwappingItem(item);
+    try {
+      const res = await swapRunItem({ runId: initial.run.id, kind: "blind_rank", item });
+      setPrompt((res.run.questions as unknown as BlindRankPrompt[])[0]);
+    } catch (err) {
+      show(getErrorMessage(err, "Couldn't swap this item. Your partner may have already finished today's run."), "error");
+    } finally {
+      setSwappingItem(null);
+    }
   }
 
   async function submit() {
@@ -125,23 +147,32 @@ export function BlindRankRunScreen({ initial }: { initial: RunStartResponse }) {
         {prompt.items.map((item) => {
           const rank = order.indexOf(item);
           const image = prompt.images?.[item];
+          const canSwap = !!prompt.ids?.[item] && rank < 0; // only before it's ranked
           return (
-            <button
-              key={item}
-              type="button"
-              onClick={() => tapItem(item)}
-              className={`flex w-full items-center gap-3 rounded-2xl p-2 text-left transition ${rank >= 0 ? "bg-[#3a362f]" : "bg-[#f7f5f1]"}`}
-            >
-              {image !== undefined && <ItemThumb imageUrl={image} />}
-              <span className={`min-w-0 flex-1 truncate text-[14.5px] font-medium ${rank >= 0 ? "text-white" : "text-[#3a362f]"}`}>{item}</span>
-              <span
-                className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[13px] font-bold ${
-                  rank >= 0 ? "bg-white/20 text-white" : "border-2 border-[#e3ddd2] text-transparent"
-                }`}
-              >
-                {rank >= 0 ? rank + 1 : "·"}
-              </span>
-            </button>
+            <div key={item} className={`flex w-full items-center gap-2 rounded-2xl p-2 transition ${rank >= 0 ? "bg-[#3a362f]" : "bg-[#f7f5f1]"}`}>
+              <button type="button" onClick={() => tapItem(item)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                {image !== undefined && <ItemThumb imageUrl={image} />}
+                <span className={`min-w-0 flex-1 truncate text-[14.5px] font-medium ${rank >= 0 ? "text-white" : "text-[#3a362f]"}`}>{item}</span>
+                <span
+                  className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[13px] font-bold ${
+                    rank >= 0 ? "bg-white/20 text-white" : "border-2 border-[#e3ddd2] text-transparent"
+                  }`}
+                >
+                  {rank >= 0 ? rank + 1 : "·"}
+                </span>
+              </button>
+              {canSwap && (
+                <button
+                  type="button"
+                  onClick={() => swapItem(item)}
+                  disabled={swappingItem !== null}
+                  aria-label={`Don't know ${item}? Swap it`}
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[#a39d92] disabled:opacity-50"
+                >
+                  <HelpCircle size={16} />
+                </button>
+              )}
+            </div>
           );
         })}
       </div>

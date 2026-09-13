@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import type { GameType } from "@/services/games-client";
-import type { GameSessionRow, FixtureRow } from "@/lib/game-types";
+import { sessionStatus, type GameSessionRow, type FixtureRow } from "@/lib/game-types";
 
 /** Server-side counterpart to games-read-client.ts's listGameSessions, for
  * each game page's initial server-rendered load. */
@@ -58,4 +58,39 @@ export async function getMatchFixtures(spaceId: string): Promise<FixtureRow[]> {
     .limit(30);
   if (error) throw error;
   return (data ?? []) as unknown as FixtureRow[];
+}
+
+/** Server-side single-fixture fetch for /play/match-predictions/[fixtureId]. */
+export async function getMatchFixture(id: string): Promise<FixtureRow | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("match_fixtures").select("*, match_predictions(*)").eq("id", id).maybeSingle();
+  if (error) throw error;
+  return data as unknown as FixtureRow | null;
+}
+
+/**
+ * The most recent session of this game type that still needs the
+ * current user's answer -- used by each game's base route (now a
+ * launcher, not a history list) to resume in place of starting a
+ * redundant new round. Returns null when there's nothing to resume,
+ * in which case the launcher starts a fresh round instead.
+ */
+export async function getResumableSession(spaceId: string, gameType: GameType, userId: string): Promise<GameSessionRow | null> {
+  const sessions = await getGameSessions(spaceId, gameType);
+  return sessions.find((s) => sessionStatus(s, userId) === "your_turn") ?? null;
+}
+
+/**
+ * Match Predictions' equivalent of getResumableSession: prefers a
+ * fixture the current user hasn't predicted yet; otherwise the most
+ * recent fixture at all (so a player checking in sees where things
+ * stand -- waiting on partner, or a settled result -- instead of
+ * nothing). Returns null only when the space has no fixtures yet, in
+ * which case the launcher falls back to its own lightweight "add a
+ * fixture" entry (there's no auto-generatable sports content here).
+ */
+export async function getResumableFixture(spaceId: string, userId: string): Promise<FixtureRow | null> {
+  const fixtures = await getMatchFixtures(spaceId);
+  const needsMe = fixtures.find((f) => !f.result && !f.match_predictions.some((p) => p.user_id === userId));
+  return needsMe ?? fixtures[0] ?? null;
 }

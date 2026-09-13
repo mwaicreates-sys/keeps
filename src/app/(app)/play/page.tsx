@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { SlidersHorizontal } from "lucide-react";
+import { SlidersHorizontal, History as HistoryIcon } from "lucide-react";
 import { getSessionContext } from "@/services/session";
 import { createClient } from "@/lib/supabase/server";
 import { getTasteProfileServer } from "@/services/taste-profile-server";
@@ -42,14 +42,25 @@ export default async function PlayPage() {
           <h1 className="text-[32px] font-bold leading-[1.1] tracking-tight text-[#3a362f]">Play</h1>
           <p className="mt-1 text-[13px] text-[#a39d92]">Little games for the two of you.</p>
         </div>
-        {/* Deliberately subtle -- a settings entry, not a gameplay CTA. */}
-        <Link
-          href="/play/tune?edit=1"
-          aria-label="Tune your Play"
-          className="mt-1 grid h-9 w-9 shrink-0 place-items-center rounded-full text-[#a39d92]"
-        >
-          <SlidersHorizontal size={18} />
-        </Link>
+        {/* Both deliberately subtle -- secondary entries, not gameplay
+            CTAs. Game cards below are the only "start playing" tap
+            target now; History is where old session lists live. */}
+        <div className="mt-1 flex shrink-0 gap-1">
+          <Link
+            href="/play/history"
+            aria-label="Play History"
+            className="grid h-9 w-9 place-items-center rounded-full text-[#a39d92]"
+          >
+            <HistoryIcon size={18} />
+          </Link>
+          <Link
+            href="/play/tune?edit=1"
+            aria-label="Tune your Play"
+            className="grid h-9 w-9 place-items-center rounded-full text-[#a39d92]"
+          >
+            <SlidersHorizontal size={18} />
+          </Link>
+        </div>
       </div>
 
       <TuneNudgeBanner hasProfile={tasteArtists.length > 0} />

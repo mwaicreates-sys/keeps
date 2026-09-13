@@ -238,7 +238,7 @@ export default async function SearchPage({
                 {results!.games.map((g) => (
                   <li key={g.id}>
                     <ResultRow
-                      href={gameHref(g.game_type)}
+                      href={gameHref(g.game_type, g.id)}
                       fallbackIcon={Gamepad2}
                       fallbackBg="#eaeafb"
                       fallbackColor="#5457c7"

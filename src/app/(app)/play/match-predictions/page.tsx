@@ -1,15 +1,23 @@
+import { redirect } from "next/navigation";
 import { getSessionContext } from "@/services/session";
-import { getMatchFixtures } from "@/services/games-server";
-import { MatchPredictionsGame } from "@/components/play/MatchPredictionsGame";
+import { getResumableFixture } from "@/services/games-server";
+import { MatchPredictionCreateForm } from "@/components/play/MatchPredictionCreateForm";
+
+// Base route is now a launcher: the next fixture needing a prediction
+// (or, failing that, the most recent one to check in on) opens
+// directly. Only a space with zero fixtures ever sees the create form
+// -- there's no sports provider to generate one automatically.
 
 export default async function MatchPredictionsPage() {
   const ctx = await getSessionContext();
   if (!ctx) return null;
-  const fixtures = await getMatchFixtures(ctx.space.id);
+
+  const resumable = await getResumableFixture(ctx.space.id, ctx.userId);
+  if (resumable) redirect(`/play/match-predictions/${resumable.id}`);
 
   return (
-    <div className="mx-auto w-full max-w-xl pb-4 md:max-w-2xl md:py-4">
-      <MatchPredictionsGame fixtures={fixtures} />
+    <div className="mx-auto w-full max-w-xl md:max-w-2xl">
+      <MatchPredictionCreateForm />
     </div>
   );
 }

@@ -23,3 +23,9 @@ export function sessionStatus(session: GameSessionRow, userId: string): "complet
   const answeredByMe = session.game_answers.some((a) => a.user_id === userId);
   return answeredByMe ? "waiting" : "your_turn";
 }
+
+export function fixtureStatus(fixture: FixtureRow, userId: string): "completed" | "waiting" | "your_turn" {
+  if (fixture.result) return "completed";
+  const predictedByMe = fixture.match_predictions.some((p) => p.user_id === userId);
+  return predictedByMe ? "waiting" : "your_turn";
+}

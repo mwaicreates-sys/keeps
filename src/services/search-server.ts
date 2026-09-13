@@ -132,15 +132,17 @@ export async function getSearchShowcase(spaceId: string): Promise<SearchShowcase
   };
 }
 
-/** Same mapping Notifications uses to route a game_type to its real page. */
-export function gameHref(gameType: string): string {
+/** Same mapping Notifications uses to route a game_type to its real
+ * session page -- this search only ever matches game_sessions rows (see
+ * the `games` query above), so `id` is always a session id, never a
+ * match_fixtures id. */
+export function gameHref(gameType: string, id: string): string {
   const map: Record<string, string> = {
     this_or_that: "this-or-that",
     top5: "top5",
     blind_rank: "blind-rank",
     guess_mine: "guess-mine",
     keep3_drop2: "keep3-drop2",
-    match_predictions: "match-predictions",
   };
-  return `/play/${map[gameType] ?? "this-or-that"}`;
+  return `/play/${map[gameType] ?? "this-or-that"}/${id}`;
 }

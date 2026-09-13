@@ -7,28 +7,27 @@ import type { GameSessionRow } from "@/lib/game-types";
 const POLL_INTERVAL_MS = 3000;
 
 /**
- * Lightweight polling for the "waiting on partner" state -- per the
- * performance pass: "if Realtime would meaningfully complicate the
- * current architecture, use lightweight polling with a short sensible
- * interval, but do not refetch provider content." This only ever reads
- * game_sessions/game_answers/game_results (a plain DB read, no
- * MusicBrainz/ListenBrainz/Wikimedia calls anywhere in that path), and
- * stops the moment a result appears or the component unmounts.
+ * Generic lightweight polling primitive -- per the performance pass:
+ * "if Realtime would meaningfully complicate the current architecture,
+ * use lightweight polling with a short sensible interval, but do not
+ * refetch provider content." `tick` should only ever do a plain DB
+ * read (game_sessions, match_fixtures, ...), never touch a content
+ * provider. Stops the moment `active` goes false or the component
+ * unmounts.
  */
-export function usePollForResult(sessionId: string, waitingForResult: boolean, onResult: (session: GameSessionRow) => void) {
-  const onResultRef = useRef(onResult);
+export function usePoll(active: boolean, tick: () => Promise<void>) {
+  const tickRef = useRef(tick);
   useEffect(() => {
-    onResultRef.current = onResult;
-  }, [onResult]);
+    tickRef.current = tick;
+  }, [tick]);
 
   useEffect(() => {
-    if (!waitingForResult) return;
+    if (!active) return;
     let cancelled = false;
     const interval = setInterval(async () => {
+      if (cancelled) return;
       try {
-        const fresh = await getGameSession(sessionId);
-        if (cancelled || !fresh) return;
-        if (fresh.game_results) onResultRef.current(fresh as unknown as GameSessionRow);
+        await tickRef.current();
       } catch {
         // Transient read failure -- just try again on the next tick.
       }
@@ -37,5 +36,18 @@ export function usePollForResult(sessionId: string, waitingForResult: boolean, o
       cancelled = true;
       clearInterval(interval);
     };
-  }, [sessionId, waitingForResult]);
+  }, [active]);
+}
+
+/**
+ * The game_sessions-specific case: polls for a result while waiting on
+ * the partner, and hands back the fresh session the moment one
+ * appears -- used by every music-game Round component's "waiting on
+ * partner" state.
+ */
+export function usePollForResult(sessionId: string, waitingForResult: boolean, onResult: (session: GameSessionRow) => void) {
+  usePoll(waitingForResult, async () => {
+    const fresh = await getGameSession(sessionId);
+    if (fresh?.game_results) onResult(fresh as unknown as GameSessionRow);
+  });
 }

@@ -30,9 +30,13 @@ function targetHref(n: Tables<"notifications">): string {
       guess_mine: "guess-mine",
       keep3_drop2: "keep3-drop2",
     };
-    return `/play/${map[data.gameType] ?? "this-or-that"}`;
+    // Deep-link straight to the specific round -- the base game route
+    // is a launcher now, not a list, so it would just start (or
+    // resume some other) round instead of opening the one this
+    // notification is actually about.
+    return `/play/${map[data.gameType] ?? "this-or-that"}/${data.sessionId}`;
   }
-  if (data.fixtureId) return "/play/match-predictions";
+  if (data.fixtureId) return `/play/match-predictions/${data.fixtureId}`;
   return "/home";
 }
 

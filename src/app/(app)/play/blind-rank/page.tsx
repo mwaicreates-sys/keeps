@@ -1,19 +1,21 @@
+import { redirect } from "next/navigation";
 import { getSessionContext } from "@/services/session";
-import { getGameSessions } from "@/services/games-server";
-import { BlindRankHistory } from "@/components/play/BlindRankHistory";
+import { getResumableSession } from "@/services/games-server";
+import { BlindRankLauncher } from "@/components/play/BlindRankLauncher";
 
-// History/inbox only -- past rounds + a CTA. The CTA creates a session
-// and navigates to /play/blind-rank/[sessionId], the actual gameplay
-// route (BlindRankRound).
+// Base route is now a launcher, not a history list. Past rounds live
+// at /play/history.
 
 export default async function BlindRankPage() {
   const ctx = await getSessionContext();
   if (!ctx) return null;
-  const sessions = await getGameSessions(ctx.space.id, "blind_rank");
+
+  const resumable = await getResumableSession(ctx.space.id, "blind_rank", ctx.userId);
+  if (resumable) redirect(`/play/blind-rank/${resumable.id}`);
 
   return (
-    <div className="mx-auto w-full max-w-xl pb-4 md:max-w-2xl md:py-4">
-      <BlindRankHistory sessions={sessions} />
+    <div className="mx-auto w-full max-w-xl md:max-w-2xl">
+      <BlindRankLauncher />
     </div>
   );
 }

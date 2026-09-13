@@ -2,22 +2,26 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { X as XIcon, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
 import { createGameSession, submitGameAnswer } from "@/services/games-client";
 import { getGameSession } from "@/services/games-read-client";
 import { prefetchMusicPool } from "@/services/music-pool-client";
 import { pickBlindRankPrompt, BLIND_RANK_ROUND_SIZE, type BlindRankPrompt } from "@/lib/blind-rank-prompt";
+import { playGame } from "@/lib/play-config";
+import { RoundHeader } from "@/components/play/RoundHeader";
 import { getErrorMessage } from "@/lib/utils";
 import type { GameSessionRow } from "@/lib/game-types";
 
 type Result = { matches: number; [userId: string]: unknown };
 
+const game = playGame("blind-rank");
+
 /** The real gameplay screen for one Blind Rank round -- lives at
  * /play/blind-rank/[sessionId], distinct from the history list at
  * /play/blind-rank. */
-export function BlindRankRound({ session: initialSession }: { session: GameSessionRow }) {
+export function BlindRankRound({ session: initialSession, roundNumber }: { session: GameSessionRow; roundNumber: number }) {
   const { userId, space, otherMember } = useSession();
   const { show } = useToast();
   const router = useRouter();
@@ -90,20 +94,16 @@ export function BlindRankRound({ session: initialSession }: { session: GameSessi
 
   return (
     <div className="mx-auto max-w-xl px-4 pb-6">
-      <div className="mb-4 flex items-center gap-3 pt-1">
-        <button
-          type="button"
-          onClick={() => router.push("/play/blind-rank")}
-          aria-label="Back"
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white text-[#3a362f] shadow-sm"
-        >
-          <XIcon size={20} />
-        </button>
-        <div className="min-w-0">
-          <p className="text-[11.5px] font-semibold uppercase tracking-wide text-[#a39d92]">{prompt.category}</p>
-          <p className="truncate text-[19px] font-bold text-[#3a362f]">{session.topic}</p>
-        </div>
-      </div>
+      <RoundHeader
+        slug="blind-rank"
+        title={game.label}
+        category={prompt.category}
+        icon={game.icon}
+        pillBg={game.bg}
+        pillColor={game.iconColor}
+        roundNumber={roundNumber}
+        question={session.topic}
+      />
 
       {result ? (
         <div className="space-y-3">
@@ -148,7 +148,7 @@ export function BlindRankRound({ session: initialSession }: { session: GameSessi
         </div>
       ) : (
         <div>
-          <p className="mb-3 text-[13px] text-[#a39d92]">Tap in order, favorite first. Tap again to undo.</p>
+          <p className="mb-3 text-[12.5px] text-[#a39d92]">Tap in order, favorite first. Tap again to undo.</p>
           <div className="space-y-2">
             {prompt.items.map((item) => {
               const rank = order.indexOf(item);
@@ -158,17 +158,19 @@ export function BlindRankRound({ session: initialSession }: { session: GameSessi
                   key={item}
                   type="button"
                   onClick={() => tapItem(item)}
-                  className={`flex w-full items-center gap-3 rounded-2xl px-3.5 py-2.5 text-left text-[14.5px] font-medium transition ${
-                    rank >= 0 ? "bg-[#3a362f] text-white" : "bg-[#f7f5f1] text-[#3a362f]"
+                  className={`flex w-full items-center gap-3 rounded-2xl p-2 text-left transition ${
+                    rank >= 0 ? "bg-[#3a362f]" : "bg-[#f7f5f1]"
                   }`}
                 >
                   {image !== undefined && <ItemThumb imageUrl={image} />}
-                  <span className="min-w-0 flex-1 truncate">{item}</span>
-                  {rank >= 0 && (
-                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-white/20 text-[12px] font-bold">
-                      {rank + 1}
-                    </span>
-                  )}
+                  <span className={`min-w-0 flex-1 truncate text-[14.5px] font-medium ${rank >= 0 ? "text-white" : "text-[#3a362f]"}`}>{item}</span>
+                  <span
+                    className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[13px] font-bold ${
+                      rank >= 0 ? "bg-white/20 text-white" : "border-2 border-[#e3ddd2] text-transparent"
+                    }`}
+                  >
+                    {rank >= 0 ? rank + 1 : "·"}
+                  </span>
                 </button>
               );
             })}
@@ -199,10 +201,10 @@ export function BlindRankRound({ session: initialSession }: { session: GameSessi
 
 function ItemThumb({ imageUrl }: { imageUrl: string | null }) {
   if (!imageUrl) {
-    return <div className="h-9 w-9 shrink-0 rounded-lg bg-black/10" />;
+    return <div className="h-11 w-11 shrink-0 rounded-xl bg-black/10" />;
   }
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={imageUrl} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover" />
+    <img src={imageUrl} alt="" className="h-11 w-11 shrink-0 rounded-xl object-cover" />
   );
 }

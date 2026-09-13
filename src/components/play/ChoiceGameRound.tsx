@@ -2,13 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, X as XIcon, HelpCircle } from "lucide-react";
+import { HelpCircle } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
 import { createGameSession, submitGameAnswer, type GameType } from "@/services/games-client";
 import { getGameSession } from "@/services/games-read-client";
 import { prefetchMusicPool } from "@/services/music-pool-client";
 import { pickChoicePrompt, type ChoicePrompt } from "@/lib/choice-prompt";
+import { playGame } from "@/lib/play-config";
+import { RoundHeader } from "@/components/play/RoundHeader";
 import { getErrorMessage } from "@/lib/utils";
 import type { GameSessionRow } from "@/lib/game-types";
 
@@ -16,21 +18,26 @@ import type { GameSessionRow } from "@/lib/game-types";
  * The actual immersive gameplay screen for one This or That / Guess Mine
  * round -- lives at /play/<slug>/<sessionId>, distinct from the history
  * list at /play/<slug>. Real, image-first content whenever the round's
- * prompt carries images (real artist photos); a plain two-option layout
- * only for the rare hardcoded-pack fallback round.
+ * prompt carries images (real artist photos): tap a card and it locks
+ * in immediately, no separate confirm step. A plain two-option layout
+ * (with its own "Lock it in" button) only for the rare hardcoded-pack
+ * fallback round.
  */
 export function ChoiceGameRound({
   gameType,
   slug,
   session: initialSession,
+  roundNumber,
 }: {
   gameType: "this_or_that" | "guess_mine";
   slug: string;
   session: GameSessionRow;
+  roundNumber: number;
 }) {
   const { userId, space, otherMember } = useSession();
   const { show } = useToast();
   const router = useRouter();
+  const game = playGame(slug);
   const [session, setSession] = useState(initialSession);
   const [choice, setChoice] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -40,20 +47,21 @@ export function ChoiceGameRound({
   const answeredByMe = session.game_answers.some((a) => a.user_id === userId);
   const result = session.game_results?.result as { matched: boolean; [userId: string]: unknown } | undefined;
   const isVisual = !!(prompt.imageA || prompt.imageB);
+  const question = isVisual ? (gameType === "guess_mine" ? "Which one would they pick?" : "Which one are you keeping?") : prompt.topic;
 
   // Warm the *next* round's pool while this one's being played.
   useEffect(() => {
     prefetchMusicPool("artist", 2, space.id);
   }, [space.id]);
 
-  async function submit() {
-    if (!choice) return;
+  async function submit(value: string) {
+    setChoice(value);
     setSubmitting(true);
     try {
       await submitGameAnswer({
         sessionId: session.id,
         userId,
-        answer: { choice },
+        answer: { choice: value },
         spaceId: space.id,
         otherMemberId: otherMember?.id ?? null,
         gameType: gameType as GameType,
@@ -64,6 +72,7 @@ export function ChoiceGameRound({
       router.refresh();
     } catch (err) {
       show(getErrorMessage(err, "Couldn't submit your answer."), "error");
+      setChoice(null);
     } finally {
       setSubmitting(false);
     }
@@ -91,20 +100,16 @@ export function ChoiceGameRound({
 
   return (
     <div className="mx-auto max-w-xl px-4 pb-6">
-      <div className="mb-4 flex items-center gap-3 pt-1">
-        <button
-          type="button"
-          onClick={() => router.push(`/play/${slug}`)}
-          aria-label="Back"
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white text-[#3a362f] shadow-sm"
-        >
-          <XIcon size={20} />
-        </button>
-        <div className="min-w-0">
-          <p className="text-[11.5px] font-semibold uppercase tracking-wide text-[#a39d92]">{prompt.category}</p>
-          <p className="truncate text-[19px] font-bold text-[#3a362f]">{prompt.topic}</p>
-        </div>
-      </div>
+      <RoundHeader
+        slug={slug}
+        title={game.label}
+        category={prompt.category}
+        icon={game.icon}
+        pillBg={game.bg}
+        pillColor={game.iconColor}
+        roundNumber={roundNumber}
+        question={question}
+      />
 
       {result ? (
         <div className="space-y-3">
@@ -142,7 +147,7 @@ export function ChoiceGameRound({
           </p>
         </div>
       ) : isVisual ? (
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           <div className="grid grid-cols-2 gap-3">
             {[
               { label: prompt.optionA, image: prompt.imageA },
@@ -151,12 +156,11 @@ export function ChoiceGameRound({
               <button
                 key={label}
                 type="button"
-                onClick={() => setChoice(label)}
-                className={`overflow-hidden rounded-[22px] text-left transition ${
-                  choice === label ? "scale-[0.98] ring-[3px] ring-[#3a362f]" : choice ? "opacity-60" : ""
-                }`}
+                onClick={() => !submitting && submit(label)}
+                disabled={submitting}
+                className={`text-center transition ${choice === label ? "scale-[0.98]" : choice ? "opacity-60" : ""}`}
               >
-                <div className="relative aspect-square w-full bg-[#f2efe9]">
+                <div className={`relative aspect-square w-full overflow-hidden rounded-[22px] bg-[#f2efe9] ${choice === label ? "ring-[3px] ring-[#3a362f]" : ""}`}>
                   {image ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={image} alt="" className="h-full w-full object-cover" />
@@ -165,26 +169,19 @@ export function ChoiceGameRound({
                       <HelpCircle size={28} />
                     </div>
                   )}
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 pb-2.5 pt-6">
-                    <p className="truncate text-[14px] font-bold text-white">{label}</p>
-                  </div>
-                  {choice === label && (
-                    <span className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-white text-[#3a362f]">
-                      <Check size={15} />
-                    </span>
-                  )}
+                  <span
+                    className={`absolute right-2.5 top-2.5 grid h-6 w-6 place-items-center rounded-full border-2 border-white ${
+                      choice === label ? "bg-[#3a362f]" : "bg-white/25"
+                    }`}
+                  >
+                    {choice === label && <span className="h-2 w-2 rounded-full bg-white" />}
+                  </span>
                 </div>
+                <p className="mt-2 truncate text-[14px] font-bold text-[#3a362f]">{label}</p>
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            onClick={submit}
-            disabled={!choice || submitting}
-            className="w-full rounded-full bg-[#3a362f] py-3.5 text-[15.5px] font-semibold text-white transition active:scale-[0.98] disabled:opacity-50"
-          >
-            {submitting ? "Submitting…" : "Lock it in"}
-          </button>
+          <p className="text-center text-[12.5px] text-[#a39d92]">{submitting ? "Locking it in…" : "Tap a card to choose"}</p>
         </div>
       ) : (
         <div className="space-y-2.5">
@@ -198,12 +195,11 @@ export function ChoiceGameRound({
               }`}
             >
               {opt}
-              {choice === opt && <Check size={18} />}
             </button>
           ))}
           <button
             type="button"
-            onClick={submit}
+            onClick={() => choice && submit(choice)}
             disabled={!choice || submitting}
             className="mt-2 w-full rounded-full bg-[#3a362f] py-3.5 text-[15.5px] font-semibold text-white transition active:scale-[0.98] disabled:opacity-50"
           >
@@ -224,15 +220,15 @@ function imageForValue(prompt: ChoicePrompt, value: string): string | null | und
 function ChoiceResultCard({ label, value, imageUrl }: { label: string; value: string; imageUrl?: string | null }) {
   if (imageUrl) {
     return (
-      <div className="overflow-hidden rounded-2xl bg-[#f7f5f1]">
-        <div className="relative aspect-square w-full">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={imageUrl} alt="" className="h-full w-full object-cover" />
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 pb-2 pt-6">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-white/75">{label}</p>
-            <p className="truncate text-[13px] font-bold text-white">{value}</p>
+      <div className="text-center">
+        <div className="overflow-hidden rounded-2xl bg-[#f7f5f1]">
+          <div className="relative aspect-square w-full">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={imageUrl} alt="" className="h-full w-full object-cover" />
           </div>
         </div>
+        <p className="mt-1.5 text-[10px] font-semibold uppercase tracking-wide text-[#a39d92]">{label}</p>
+        <p className="truncate text-[13.5px] font-bold text-[#3a362f]">{value}</p>
       </div>
     );
   }

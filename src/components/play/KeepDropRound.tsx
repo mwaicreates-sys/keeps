@@ -2,21 +2,25 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { X as XIcon, Check } from "lucide-react";
+import { Check } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
 import { createGameSession, submitGameAnswer } from "@/services/games-client";
 import { getGameSession } from "@/services/games-read-client";
 import { warmAllKeepDropKinds, pickKeepDropPrompt, KEEP_COUNT, type KeepDropPrompt } from "@/lib/keep-drop-prompt";
+import { playGame } from "@/lib/play-config";
+import { RoundHeader } from "@/components/play/RoundHeader";
 import { getErrorMessage } from "@/lib/utils";
 import type { GameSessionRow } from "@/lib/game-types";
 
 type Result = { overlap: string[]; overlapCount: number; [userId: string]: unknown };
 
+const game = playGame("keep3-drop2");
+
 /** The real gameplay screen for one Keep 3, Drop 2 round -- lives at
  * /play/keep3-drop2/[sessionId], distinct from the history list at
  * /play/keep3-drop2. */
-export function KeepDropRound({ session: initialSession }: { session: GameSessionRow }) {
+export function KeepDropRound({ session: initialSession, roundNumber }: { session: GameSessionRow; roundNumber: number }) {
   const { userId, space, otherMember } = useSession();
   const { show } = useToast();
   const router = useRouter();
@@ -29,6 +33,7 @@ export function KeepDropRound({ session: initialSession }: { session: GameSessio
   const answeredByMe = session.game_answers.some((a) => a.user_id === userId);
   const result = session.game_results?.result as Result | undefined;
   const isVisual = !!prompt.images;
+  const question = isVisual ? "Pick 3 to keep" : session.topic;
 
   useEffect(() => {
     warmAllKeepDropKinds(space.id);
@@ -87,20 +92,16 @@ export function KeepDropRound({ session: initialSession }: { session: GameSessio
 
   return (
     <div className="mx-auto max-w-xl px-4 pb-6">
-      <div className="mb-4 flex items-center gap-3 pt-1">
-        <button
-          type="button"
-          onClick={() => router.push("/play/keep3-drop2")}
-          aria-label="Back"
-          className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white text-[#3a362f] shadow-sm"
-        >
-          <XIcon size={20} />
-        </button>
-        <div className="min-w-0">
-          <p className="text-[11.5px] font-semibold uppercase tracking-wide text-[#a39d92]">{prompt.category}</p>
-          <p className="truncate text-[19px] font-bold text-[#3a362f]">{session.topic}</p>
-        </div>
-      </div>
+      <RoundHeader
+        slug="keep3-drop2"
+        title={game.label}
+        category={prompt.category}
+        icon={game.icon}
+        pillBg={game.bg}
+        pillColor={game.iconColor}
+        roundNumber={roundNumber}
+        question={question}
+      />
 
       {result ? (
         <div className="space-y-3">
@@ -134,8 +135,7 @@ export function KeepDropRound({ session: initialSession }: { session: GameSessio
         </div>
       ) : isVisual ? (
         <div>
-          <p className="mb-3 text-[13px] text-[#a39d92]">Tap the 3 you&apos;d keep.</p>
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-2 gap-3">
             {prompt.items.map((item, i) => {
               const isKept = kept.includes(item);
               const image = prompt.images?.[item];
@@ -144,26 +144,26 @@ export function KeepDropRound({ session: initialSession }: { session: GameSessio
                   key={item}
                   type="button"
                   onClick={() => toggle(item)}
-                  className={`relative overflow-hidden rounded-[18px] transition ${
+                  className={`text-center transition ${
                     i === prompt.items.length - 1 && prompt.items.length % 2 === 1 ? "col-span-2 mx-auto w-1/2 min-w-[45%]" : ""
-                  } ${isKept ? "ring-[3px] ring-[#3a362f]" : ""}`}
+                  }`}
                 >
-                  <div className="relative aspect-square w-full bg-[#f2efe9]">
+                  <div className={`relative aspect-square w-full overflow-hidden rounded-[18px] bg-[#f2efe9] ${isKept ? "ring-[3px] ring-[#3a362f]" : ""}`}>
                     {image ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={image} alt="" className={`h-full w-full object-cover transition ${!isKept && kept.length >= KEEP_COUNT ? "opacity-50" : ""}`} />
                     ) : (
                       <div className="h-full w-full bg-black/10" />
                     )}
-                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2.5 pb-2 pt-6">
-                      <p className="truncate text-[12.5px] font-bold text-white">{item}</p>
-                    </div>
-                    {isKept && (
-                      <span className="absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full bg-white text-[#3a362f]">
-                        <Check size={13} />
-                      </span>
-                    )}
+                    <span
+                      className={`absolute right-2 top-2 grid h-6 w-6 place-items-center rounded-full border-2 border-white ${
+                        isKept ? "bg-[#c23a3a]" : "bg-white/25"
+                      }`}
+                    >
+                      {isKept && <Check size={13} className="text-white" />}
+                    </span>
                   </div>
+                  <p className="mt-1.5 truncate text-[13px] font-bold text-[#3a362f]">{item}</p>
                 </button>
               );
             })}
@@ -172,14 +172,14 @@ export function KeepDropRound({ session: initialSession }: { session: GameSessio
             type="button"
             onClick={submit}
             disabled={kept.length !== KEEP_COUNT || submitting}
-            className="mt-3 w-full rounded-full bg-[#3a362f] py-3.5 text-[15.5px] font-semibold text-white transition active:scale-[0.98] disabled:opacity-50"
+            className="mt-3.5 w-full rounded-full bg-[#3a362f] py-3.5 text-[15.5px] font-semibold text-white transition active:scale-[0.98] disabled:opacity-50"
           >
-            {submitting ? "Submitting…" : `Lock in (${kept.length}/${KEEP_COUNT})`}
+            {submitting ? "Submitting…" : `Confirm ${KEEP_COUNT} picks`}
           </button>
         </div>
       ) : (
         <div>
-          <p className="mb-3 text-[13px] text-[#a39d92]">Keep exactly {KEEP_COUNT} — the rest get dropped.</p>
+          <p className="mb-3 text-[12.5px] text-[#a39d92]">Keep exactly {KEEP_COUNT} — the rest get dropped.</p>
           <div className="space-y-2">
             {prompt.items.map((item) => {
               const isKept = kept.includes(item);
@@ -204,7 +204,7 @@ export function KeepDropRound({ session: initialSession }: { session: GameSessio
             disabled={kept.length !== KEEP_COUNT || submitting}
             className="mt-3 w-full rounded-full bg-[#3a362f] py-3.5 text-[15.5px] font-semibold text-white transition active:scale-[0.98] disabled:opacity-50"
           >
-            {submitting ? "Submitting…" : `Lock in (${kept.length}/${KEEP_COUNT})`}
+            {submitting ? "Submitting…" : `Confirm ${KEEP_COUNT} picks`}
           </button>
         </div>
       )}

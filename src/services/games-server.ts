@@ -30,6 +30,23 @@ export async function getGameSession(id: string): Promise<GameSessionRow | null>
   return data as unknown as GameSessionRow | null;
 }
 
+/** Purely cosmetic "N of 10" round counter for the active-gameplay
+ * header -- counts how many sessions of this game type existed at or
+ * before this one (by created_at) and cycles 1-10. Never gates anything;
+ * just gives the round screen a sense of progress. */
+export async function getGameSessionRoundNumber(spaceId: string, gameType: GameType, createdAt: string): Promise<number> {
+  const supabase = await createClient();
+  const { count, error } = await supabase
+    .from("game_sessions")
+    .select("id", { count: "exact", head: true })
+    .eq("space_id", spaceId)
+    .eq("game_type", gameType)
+    .lte("created_at", createdAt);
+  if (error) throw error;
+  const total = count ?? 1;
+  return ((total - 1) % 10) + 1;
+}
+
 /** Server-side counterpart to match-predictions-read-client.ts's listFixtures. */
 export async function getMatchFixtures(spaceId: string): Promise<FixtureRow[]> {
   const supabase = await createClient();

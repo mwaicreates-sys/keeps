@@ -39,7 +39,7 @@ export default async function MemoryDetailPage({ params }: { params: Promise<{ i
   };
 
   return (
-    <div className="mx-auto max-w-xl pb-4 md:max-w-2xl md:py-4">
+    <div className="mx-auto w-full max-w-xl pb-4 md:max-w-2xl md:py-4">
       <HomeHeader unreadCount={unreadCount ?? 0} />
 
       <div className="mb-3 px-4">

@@ -89,7 +89,7 @@ export default async function ProfilePage({
   }
 
   return (
-    <div className="mx-auto max-w-xl pb-4 md:max-w-2xl md:py-4">
+    <div className="mx-auto w-full max-w-xl pb-4 md:max-w-2xl md:py-4">
       <HomeHeader unreadCount={unreadCount ?? 0} />
 
       <div className="mx-4 mb-4 overflow-hidden rounded-[26px] bg-white px-5 pb-5 pt-6 shadow-[0_2px_16px_-6px_rgba(20,18,15,0.12)]">

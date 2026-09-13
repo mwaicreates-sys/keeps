@@ -24,7 +24,7 @@ export function BottomNav() {
       className="fixed inset-x-0 bottom-0 z-40 border-t border-[#f0ede6] bg-white/95 backdrop-blur md:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
-      <ul className="flex h-20 items-center justify-between px-3">
+      <ul className="flex h-16 items-center justify-between px-3">
         {items.map(({ href, label, icon: Icon, primary }) => {
           const active = pathname.startsWith(href);
           return (
@@ -34,16 +34,14 @@ export function BottomNav() {
                 aria-label={label}
                 aria-current={active ? "page" : undefined}
                 className="grid place-items-center"
-                style={{ height: 52, width: 52 }}
+                style={{ height: 44, width: 44 }}
               >
                 {primary ? (
-                  // Drop button — left at its current size on purpose (already
-                  // the largest, most tappable control in the bar).
-                  <span className="grid place-items-center rounded-full bg-[#3a362f] text-white" style={{ height: 58, width: 58 }}>
-                    <Icon size={27} strokeWidth={2.2} />
+                  <span className="grid place-items-center rounded-full bg-[#3a362f] text-white" style={{ height: 46, width: 46 }}>
+                    <Icon size={22} strokeWidth={2.2} />
                   </span>
                 ) : (
-                  <Icon size={29} strokeWidth={active ? 2.3 : 2} className={active ? "text-[#3a362f]" : "text-[#716b5f]"} />
+                  <Icon size={23} strokeWidth={active ? 2.3 : 2} className={active ? "text-[#3a362f]" : "text-[#716b5f]"} />
                 )}
               </Link>
             </li>
@@ -54,10 +52,10 @@ export function BottomNav() {
             href="/profile"
             aria-current={profileActive ? "page" : undefined}
             className="grid place-items-center"
-            style={{ height: 52, width: 52 }}
+            style={{ height: 44, width: 44 }}
           >
             <span className={cn("rounded-full p-0.5", profileActive && "ring-2 ring-[#3a362f]")}>
-              <Avatar name={profile.display_name} url={profile.avatar_url} size={46} />
+              <Avatar name={profile.display_name} url={profile.avatar_url} size={36} />
             </span>
           </Link>
         </li>

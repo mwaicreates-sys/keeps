@@ -23,7 +23,7 @@ export default async function DropPage() {
   const recentPlace = recentPosts.find((p) => (p.type === "activity" || p.type === "place") && p.place)?.place ?? null;
 
   return (
-    <div className="mx-auto max-w-xl pb-4 md:max-w-2xl md:py-4">
+    <div className="mx-auto w-full max-w-xl pb-4 md:max-w-2xl md:py-4">
       <HomeHeader unreadCount={unreadCount ?? 0} />
       <DropLanding
         recentMedia={recentMedia}

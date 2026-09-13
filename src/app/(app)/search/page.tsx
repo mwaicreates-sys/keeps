@@ -61,7 +61,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
   const total = results ? results.posts.length + results.songs.length + results.collections.length + results.games.length : 0;
 
   return (
-    <div className="mx-auto max-w-xl pb-4 md:max-w-2xl md:py-4">
+    <div className="mx-auto w-full max-w-xl pb-4 md:max-w-2xl md:py-4">
       <HomeHeader unreadCount={unreadCount ?? 0} />
 
       <PageIntro title="Search" subtitle="Posts, memories, songs, games, collections, and tags." />

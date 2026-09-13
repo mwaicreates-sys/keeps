@@ -72,7 +72,7 @@ export default async function MemoriesPage({
   const onThisDay = resurfaced.find((r) => r.label.includes("today"));
 
   return (
-    <div className="mx-auto max-w-xl pb-4 md:max-w-2xl md:py-4">
+    <div className="mx-auto w-full max-w-xl pb-4 md:max-w-2xl md:py-4">
       <HomeHeader unreadCount={unreadCount ?? 0} />
 
       <PageIntro title="Memories" subtitle="Everything worth keeping." />

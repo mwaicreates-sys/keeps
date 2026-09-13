@@ -35,7 +35,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ id:
   const cover = posts.map((p) => p.media[0]?.url).find((u): u is string => !!u) ?? null;
 
   return (
-    <div className="mx-auto max-w-xl pb-4 md:max-w-2xl md:py-4">
+    <div className="mx-auto w-full max-w-xl pb-4 md:max-w-2xl md:py-4">
       <HomeHeader unreadCount={unreadCount ?? 0} />
 
       <div className="mb-3 px-4">

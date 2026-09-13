@@ -15,7 +15,6 @@ type RecentSong = { title: string; artist: string | null; artworkUrl: string | n
 
 export function DropLanding({
   recentMedia,
-  collections,
   recentCaption,
   recentPlace,
   recentActivityPhoto,
@@ -23,7 +22,6 @@ export function DropLanding({
   recentFavoritePhotos,
 }: {
   recentMedia: { id: string; url: string }[];
-  collections: { id: string; name: string }[];
   /** A real recent text Drop's caption, shown as the Text card's preview scrap — never fabricated copy. */
   recentCaption: string | null;
   /** A real recent activity/place Drop's place label — same rule, never fabricated. */
@@ -57,7 +55,6 @@ export function DropLanding({
       <DropComposer
         type={openType}
         isStory={isStory}
-        collections={collections}
         initialCaption={openType === "text" ? quickCaption : undefined}
         onClose={() => {
           setOpenType(null);

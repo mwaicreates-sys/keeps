@@ -168,7 +168,7 @@ export function PostCard({ post }: { post: FeedPost }) {
 
       {post.favorite && (
         <div className="mb-3 rounded-2xl bg-[#fdf3e0] px-3.5 py-2.5">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#c99a2e]">Favorite · {post.favorite.favorite_type}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#c99a2e]">Favorite</p>
           <p className="text-[17px] font-bold text-[#3a362f]">{post.favorite.item_name}</p>
         </div>
       )}

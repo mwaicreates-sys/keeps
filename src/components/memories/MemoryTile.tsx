@@ -30,7 +30,7 @@ export function MemoryTile({ post }: { post: FeedPost }) {
       ) : (post.type === "activity" || post.type === "place") && !cover ? (
         <PlaceTile place={post.place} />
       ) : post.type === "favorite" && !cover ? (
-        <FavoriteTile itemName={post.favorite?.item_name} favoriteType={post.favorite?.favorite_type} />
+        <FavoriteTile itemName={post.favorite?.item_name} />
       ) : cover ? (
         <>
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -106,17 +106,10 @@ function PlaceTile({ place }: { place: string | null }) {
   );
 }
 
-function FavoriteTile({
-  itemName,
-  favoriteType,
-}: {
-  itemName: string | undefined;
-  favoriteType: string | undefined;
-}) {
+function FavoriteTile({ itemName }: { itemName: string | undefined }) {
   return (
     <div className="relative flex h-full w-full flex-col items-center justify-center gap-1.5 bg-[#fdf3e0] p-2 text-center">
       <Star size={22} className="fill-[#c99a2e] text-[#c99a2e]" />
-      {favoriteType && <p className="text-[10px] uppercase tracking-wide text-[#c99a2e]">{favoriteType}</p>}
       <p className="line-clamp-2 text-[12.5px] font-medium text-[#3a362f]">{itemName || "A favorite"}</p>
     </div>
   );

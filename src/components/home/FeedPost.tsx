@@ -116,7 +116,7 @@ export function FeedPost({ post, initialShowComments = false }: { post: FeedPost
 
       {post.favorite && (
         <div className="mt-2 rounded-xl bg-[#fdf3e0] px-3 py-2">
-          <p className="text-[9.5px] uppercase tracking-wide text-[#c99a2e]">Favorite · {post.favorite.favorite_type}</p>
+          <p className="text-[9.5px] uppercase tracking-wide text-[#c99a2e]">Favorite</p>
           <p className="text-[13.5px] font-semibold text-[#3a362f]">{post.favorite.item_name}</p>
         </div>
       )}

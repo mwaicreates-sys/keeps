@@ -1,23 +1,16 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { usesHomeLightTheme } from "@/lib/theme-routes";
 
 /**
- * Home, Memories, and Drop each render their own HomeHeader instance
- * (matching Home's chrome exactly is the whole point of redesigning these
- * pages) — the shared mobile TopBar would duplicate it, so it's suppressed
- * on those routes only.
+ * Home, Memories, Drop, Play, Profile, Notifications, and Search each
+ * render their own HomeHeader instance — the shared mobile TopBar would
+ * duplicate it, so it's suppressed on those routes (the same set that
+ * uses the light theme; see theme-routes.ts).
  */
-const HOME_HEADER_ROUTES = new Set(["/memories", "/drop", "/play", "/profile", "/notifications", "/search"]);
-
 export function HideOnHome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  if (
-    pathname.startsWith("/home") ||
-    pathname.startsWith("/memories/") ||
-    pathname.startsWith("/collections/") ||
-    HOME_HEADER_ROUTES.has(pathname)
-  )
-    return null;
+  if (usesHomeLightTheme(pathname)) return null;
   return <>{children}</>;
 }

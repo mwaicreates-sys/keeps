@@ -7,6 +7,7 @@ import { DesktopSidebar } from "@/components/DesktopSidebar";
 import { TopBar } from "@/components/TopBar";
 import { HideOnHome } from "@/components/HideOnHome";
 import { MainSurface } from "@/components/MainSurface";
+import { AppThemeShell } from "@/components/AppThemeShell";
 import { SessionProvider } from "@/components/SessionProvider";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -15,7 +16,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <SessionProvider value={ctx}>
-      <div className="flex min-h-dvh bg-paper">
+      <AppThemeShell>
         <DesktopSidebar />
         <div className="flex min-h-dvh flex-1 flex-col">
           <HideOnHome>
@@ -31,7 +32,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
           <MainSurface>{children}</MainSurface>
         </div>
-      </div>
+      </AppThemeShell>
       <BottomNav />
     </SessionProvider>
   );

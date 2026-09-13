@@ -7,15 +7,52 @@ import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
 import { createGameSession, submitGameAnswer, type GameType } from "@/services/games-client";
 import { getGameSession } from "@/services/games-read-client";
+import { fetchMusicPool } from "@/services/music-pool-client";
+import { MUSIC_CATEGORY } from "@/lib/play-music-categories";
 import { THIS_OR_THAT_PACK, GUESS_MINE_PACK, randomFrom } from "@/lib/game-prompts";
 import { getErrorMessage, timeAgo } from "@/lib/utils";
 import { GameHeader } from "@/components/play/GameHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { sessionStatus, type GameSessionRow } from "@/lib/game-types";
 
-type Prompt = { topic: string; category: string; optionA: string; optionB: string };
+type Prompt = {
+  topic: string;
+  category: string;
+  optionA: string;
+  optionB: string;
+  /** Only present for a real, provider-backed matchup (e.g. two
+   * MusicBrainz artists) -- when set, the round renders as large image
+   * cards instead of text pills. */
+  imageA?: string | null;
+  imageB?: string | null;
+  /** The provider items' own ids, stored so future rounds can exclude
+   * them (see /api/play/music-pool's recently-used lookup). */
+  items?: { id: string; title: string }[];
+};
 
-function pickPrompt(gameType: "this_or_that" | "guess_mine"): Prompt {
+async function pickPrompt(
+  gameType: "this_or_that" | "guess_mine",
+  spaceId: string
+): Promise<Prompt> {
+  // This or That gets a real, image-first music matchup part of the
+  // time -- mixed in with the existing hardcoded categories rather than
+  // replacing them, so the game still covers movies/football/food/etc.
+  if (gameType === "this_or_that" && Math.random() < 0.5) {
+    const pool = await fetchMusicPool("artist", 2, spaceId);
+    if (pool.items.length === 2) {
+      const [a, b] = pool.items;
+      return {
+        topic: `${a.title} or ${b.title}`,
+        category: MUSIC_CATEGORY.artist,
+        optionA: a.title,
+        optionB: b.title,
+        imageA: a.imageUrl,
+        imageB: b.imageUrl,
+        items: pool.items.map((i) => ({ id: i.id, title: i.title })),
+      };
+    }
+  }
+
   if (gameType === "guess_mine") {
     const p = randomFrom(GUESS_MINE_PACK);
     return { topic: p.question, category: p.category, optionA: p.optionA, optionB: p.optionB };
@@ -56,7 +93,7 @@ export function ChoiceGame({
   async function startNew() {
     setStarting(true);
     try {
-      const prompt = pickPrompt(gameType);
+      const prompt = await pickPrompt(gameType, space.id);
       const session = await createGameSession({
         spaceId: space.id,
         createdBy: userId,
@@ -105,6 +142,7 @@ export function ChoiceGame({
     const result = active.game_results?.result as
       | { matched: boolean; [userId: string]: unknown }
       | undefined;
+    const isVisual = !!(prompt.imageA || prompt.imageB);
 
     return (
       <div className="mx-auto max-w-xl px-4 pb-6">
@@ -133,8 +171,18 @@ export function ChoiceGame({
               {result.matched ? "You matched! 🎉" : "You picked differently"}
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <ChoiceResultCard label="You" value={result[userId] as string} />
-              {otherMember && <ChoiceResultCard label={otherMember.display_name} value={result[otherMember.id] as string} />}
+              <ChoiceResultCard
+                label="You"
+                value={result[userId] as string}
+                imageUrl={imageForValue(prompt, result[userId] as string)}
+              />
+              {otherMember && (
+                <ChoiceResultCard
+                  label={otherMember.display_name}
+                  value={result[otherMember.id] as string}
+                  imageUrl={imageForValue(prompt, result[otherMember.id] as string)}
+                />
+              )}
             </div>
           </div>
         ) : answeredByMe ? (
@@ -143,6 +191,51 @@ export function ChoiceGame({
             <p className="mt-1 text-[13px] text-[#a39d92]">
               Waiting on {otherMember?.display_name ?? "your partner"} to answer too.
             </p>
+          </div>
+        ) : isVisual ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { label: prompt.optionA, image: prompt.imageA },
+                { label: prompt.optionB, image: prompt.imageB },
+              ].map(({ label, image }) => (
+                <button
+                  key={label}
+                  type="button"
+                  onClick={() => setChoice(label)}
+                  className={`overflow-hidden rounded-[22px] text-left transition ${
+                    choice === label ? "scale-[0.98] ring-[3px] ring-[#3a362f]" : choice ? "opacity-60" : ""
+                  }`}
+                >
+                  <div className="relative aspect-square w-full bg-[#f2efe9]">
+                    {image ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={image} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="grid h-full w-full place-items-center text-[#a39d92]">
+                        <HelpCircle size={28} />
+                      </div>
+                    )}
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 pb-2.5 pt-6">
+                      <p className="truncate text-[14px] font-bold text-white">{label}</p>
+                    </div>
+                    {choice === label && (
+                      <span className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-white text-[#3a362f]">
+                        <Check size={15} />
+                      </span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={submit}
+              disabled={!choice || submitting}
+              className="w-full rounded-full bg-[#3a362f] py-3.5 text-[15.5px] font-semibold text-white transition active:scale-[0.98] disabled:opacity-50"
+            >
+              {submitting ? "Submitting…" : "Lock it in"}
+            </button>
           </div>
         ) : (
           <div className="space-y-2.5">
@@ -203,7 +296,27 @@ export function ChoiceGame({
   );
 }
 
-function ChoiceResultCard({ label, value }: { label: string; value: string }) {
+function imageForValue(prompt: Prompt, value: string): string | null | undefined {
+  if (value === prompt.optionA) return prompt.imageA;
+  if (value === prompt.optionB) return prompt.imageB;
+  return undefined;
+}
+
+function ChoiceResultCard({ label, value, imageUrl }: { label: string; value: string; imageUrl?: string | null }) {
+  if (imageUrl) {
+    return (
+      <div className="overflow-hidden rounded-2xl bg-[#f7f5f1]">
+        <div className="relative aspect-square w-full">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={imageUrl} alt="" className="h-full w-full object-cover" />
+          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-3 pb-2 pt-6">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-white/75">{label}</p>
+            <p className="truncate text-[13px] font-bold text-white">{value}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="rounded-2xl bg-[#f7f5f1] px-4 py-4 text-center">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-[#a39d92]">{label}</p>

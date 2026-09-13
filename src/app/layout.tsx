@@ -46,6 +46,23 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        {/*
+          Zero-network-cost safety net against a flash-of-unstyled-content
+          window on a slow connection: on a weak/high-latency connection,
+          Chrome can paint the page before the external stylesheet finishes
+          loading rather than block indefinitely. Until that stylesheet
+          arrives, a plain <img> has no width constraint and renders at its
+          native pixel size (a real photo is often 1000px+ wide), which
+          overflows a phone-width screen — this is a plausible explanation
+          for reports of images/content bleeding past the right edge that a
+          fast-network render never reproduces. This inline style is part
+          of the initial HTML itself (no request needed) so it's active
+          from the very first paint, before globals.css can possibly have
+          loaded.
+        */}
+        <style>{`html,body{max-width:100%;overflow-x:hidden}img,video{max-width:100%;height:auto}`}</style>
+      </head>
       <body className={`${fraunces.variable} ${inter.variable} ${baloo.variable} antialiased`}>
         <ToastProvider>{children}</ToastProvider>
       </body>

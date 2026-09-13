@@ -49,8 +49,8 @@ export function FeedPost({ post }: { post: FeedPostData }) {
 
   return (
     <article
-      className={`mx-4 mb-4 rounded-[26px] bg-white px-4 shadow-[0_2px_16px_-6px_rgba(20,18,15,0.12)] ${
-        isTextOnly ? "py-5" : "py-4"
+      className={`mx-4 mb-3.5 rounded-[20px] bg-white px-3.5 shadow-[0_2px_16px_-6px_rgba(20,18,15,0.12)] ${
+        isTextOnly ? "py-4" : "py-3"
       }`}
     >
       <PostHeader
@@ -72,43 +72,43 @@ export function FeedPost({ post }: { post: FeedPostData }) {
           href={post.song.url ?? "#"}
           target="_blank"
           rel="noreferrer"
-          className="mt-2.5 flex items-start gap-3 rounded-2xl bg-[#f7f5f1] p-3.5"
+          className="mt-2 flex items-start gap-2.5 rounded-xl bg-[#f7f5f1] p-2.5"
         >
           {post.song.artwork_url ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={post.song.artwork_url} alt="" className="h-[104px] w-[104px] shrink-0 rounded-xl object-cover" />
+            <img src={post.song.artwork_url} alt="" className="h-20 w-20 shrink-0 rounded-lg object-cover" />
           ) : (
-            <div className="grid h-[104px] w-[104px] shrink-0 place-items-center rounded-xl bg-[#e9e4da]">
-              <Music2 size={30} className="text-[#7c766c]" />
+            <div className="grid h-20 w-20 shrink-0 place-items-center rounded-lg bg-[#e9e4da]">
+              <Music2 size={23} className="text-[#7c766c]" />
             </div>
           )}
           <div className="min-w-0 flex-1 py-1">
-            <p className="truncate text-[18px] font-semibold leading-tight text-[#3a362f]">{post.song.title}</p>
+            <p className="truncate text-[14px] font-semibold leading-tight text-[#3a362f]">{post.song.title}</p>
             {post.song.artist && (
-              <p className="truncate text-[15.5px] font-medium leading-snug text-[#7c766c]">{post.song.artist}</p>
+              <p className="truncate text-[12px] font-medium leading-snug text-[#7c766c]">{post.song.artist}</p>
             )}
             {post.song.album && (
-              <p className="truncate text-[13.5px] leading-snug text-[#a39d92]">{post.song.album}</p>
+              <p className="truncate text-[10.5px] leading-snug text-[#a39d92]">{post.song.album}</p>
             )}
             {post.song.note && (
-              <p className="mt-1 line-clamp-2 text-[14.5px] italic leading-snug text-[#7c766c]">&ldquo;{post.song.note}&rdquo;</p>
+              <p className="mt-1 line-clamp-2 text-[11px] italic leading-snug text-[#7c766c]">&ldquo;{post.song.note}&rdquo;</p>
             )}
           </div>
-          <span className="mt-0.5 grid shrink-0 place-items-center rounded-full bg-white text-[#3a362f] shadow-sm" style={{ height: 52, width: 52 }}>
-            <Play size={20} fill="currentColor" strokeWidth={0} />
+          <span className="mt-0.5 grid shrink-0 place-items-center rounded-full bg-white text-[#3a362f] shadow-sm" style={{ height: 40, width: 40 }}>
+            <Play size={15} fill="currentColor" strokeWidth={0} />
           </span>
         </a>
       )}
 
       {post.favorite && (
-        <div className="mt-2.5 rounded-2xl bg-[#fdf3e0] px-3.5 py-2.5">
-          <p className="text-[11px] uppercase tracking-wide text-[#c99a2e]">Favorite · {post.favorite.favorite_type}</p>
-          <p className="text-base font-semibold text-[#3a362f]">{post.favorite.item_name}</p>
+        <div className="mt-2 rounded-xl bg-[#fdf3e0] px-3 py-2">
+          <p className="text-[9.5px] uppercase tracking-wide text-[#c99a2e]">Favorite · {post.favorite.favorite_type}</p>
+          <p className="text-[13.5px] font-semibold text-[#3a362f]">{post.favorite.item_name}</p>
         </div>
       )}
 
       {post.caption && post.type !== "activity" && (
-        <p className="mt-2.5 px-1 text-[15.5px] text-[#3a362f]" style={{ lineHeight: 1.45 }}>
+        <p className="mt-2 px-1 text-[13px] text-[#3a362f]" style={{ lineHeight: 1.45 }}>
           {post.caption}
         </p>
       )}

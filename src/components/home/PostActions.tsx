@@ -53,20 +53,20 @@ export function PostActions({
             onClick={() => react("❤️")}
             aria-pressed={liked}
             aria-label="Like"
-            className="grid h-[52px] w-[52px] place-items-center rounded-full transition active:scale-90"
+            className="grid h-10 w-10 place-items-center rounded-full transition active:scale-90"
           >
-            <Heart size={30} strokeWidth={2.1} className={liked ? "text-[#ec4899]" : "text-[#3a362f]"} fill={liked ? "#ec4899" : "none"} />
+            <Heart size={23} strokeWidth={2.1} className={liked ? "text-[#ec4899]" : "text-[#3a362f]"} fill={liked ? "#ec4899" : "none"} />
           </button>
-          <button onClick={onToggleComments} aria-label="Replies" className="grid h-[52px] w-[52px] place-items-center rounded-full">
-            <MessageCircle size={28} strokeWidth={2.1} className="text-[#3a362f]" />
+          <button onClick={onToggleComments} aria-label="Replies" className="grid h-10 w-10 place-items-center rounded-full">
+            <MessageCircle size={21} strokeWidth={2.1} className="text-[#3a362f]" />
           </button>
           <button
             onClick={() => setShowMore((s) => !s)}
             aria-label="More reactions"
             aria-expanded={showMore}
-            className="grid h-[52px] w-[52px] place-items-center rounded-full"
+            className="grid h-10 w-10 place-items-center rounded-full"
           >
-            <SmilePlus size={28} strokeWidth={2.1} className="text-[#3a362f]" />
+            <SmilePlus size={21} strokeWidth={2.1} className="text-[#3a362f]" />
           </button>
         </div>
 
@@ -78,7 +78,7 @@ export function PostActions({
                 if (!m) return null;
                 return (
                   <span key={id} className="rounded-full ring-2 ring-white">
-                    <Avatar name={m.display_name} url={m.avatar_url} size={26} />
+                    <Avatar name={m.display_name} url={m.avatar_url} size={20} />
                   </span>
                 );
               })}
@@ -91,9 +91,9 @@ export function PostActions({
             }}
             aria-pressed={localSaved}
             aria-label="Save"
-            className="grid h-12 w-12 place-items-center rounded-full"
+            className="grid h-9 w-9 place-items-center rounded-full"
           >
-            <Bookmark size={23} strokeWidth={2} className={cn("text-[#a39d92]", localSaved && "text-[#3a362f]")} fill={localSaved ? "#3a362f" : "none"} />
+            <Bookmark size={18} strokeWidth={2} className={cn("text-[#a39d92]", localSaved && "text-[#3a362f]")} fill={localSaved ? "#3a362f" : "none"} />
           </button>
           <button
             onClick={() => {
@@ -102,9 +102,9 @@ export function PostActions({
             }}
             aria-pressed={localMemory}
             aria-label="Keep as memory"
-            className="grid h-12 w-12 place-items-center rounded-full"
+            className="grid h-9 w-9 place-items-center rounded-full"
           >
-            <Sparkles size={23} strokeWidth={2} className={cn("text-[#a39d92]", localMemory && "text-[#d4a72c]")} fill={localMemory ? "#d4a72c" : "none"} />
+            <Sparkles size={18} strokeWidth={2} className={cn("text-[#a39d92]", localMemory && "text-[#d4a72c]")} fill={localMemory ? "#d4a72c" : "none"} />
           </button>
         </div>
       </div>

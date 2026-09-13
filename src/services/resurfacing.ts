@@ -103,3 +103,73 @@ export async function getMemoryHighlights(spaceId: string): Promise<MemoryHighli
 
   return { onThisDay, recentlyAdded };
 }
+
+export type DropInspiration = {
+  recentSong: { title: string; artist: string | null; artworkUrl: string | null } | null;
+  recentCaption: string | null;
+  recentPlace: string | null;
+  recentActivityPhoto: string | null;
+  recentFavoritePhotos: string[];
+};
+
+/**
+ * Real scraps of this space's own recent Drops, used only as small preview
+ * hints on the Drop page's type cards (a real song's artwork as the Song
+ * card's background, a real caption on the Text card, …) — never
+ * fabricated placeholder content. Each field is independently null/empty
+ * when there's nothing real to show yet, so a brand-new space just gets
+ * plain cards.
+ */
+export async function getDropInspiration(spaceId: string): Promise<DropInspiration> {
+  const supabase = await createClient();
+  const [{ data: songRow }, { data: textRow }, { data: activityRow }, { data: favoriteRows }] = await Promise.all([
+    supabase
+      .from("posts")
+      .select("post_song_metadata!inner(title, artist, artwork_url)")
+      .eq("space_id", spaceId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("posts")
+      .select("caption")
+      .eq("space_id", spaceId)
+      .eq("type", "text")
+      .not("caption", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("posts")
+      .select("place, media:post_media(url)")
+      .eq("space_id", spaceId)
+      .eq("type", "activity")
+      .not("place", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("posts")
+      .select("id, post_media!inner(url)")
+      .eq("space_id", spaceId)
+      .eq("type", "favorite")
+      .eq("post_media.media_type", "photo")
+      .order("created_at", { ascending: false })
+      .limit(3),
+  ]);
+
+  const song =
+    (songRow?.post_song_metadata as { title: string; artist: string | null; artwork_url: string | null } | null) ?? null;
+  const activityMedia = (activityRow?.media as { url: string }[] | null) ?? [];
+  const recentFavoritePhotos = (favoriteRows ?? [])
+    .flatMap((r) => ((r.post_media as { url: string }[] | null) ?? []).map((m) => m.url))
+    .slice(0, 3);
+
+  return {
+    recentSong: song ? { title: song.title, artist: song.artist, artworkUrl: song.artwork_url } : null,
+    recentCaption: textRow?.caption ?? null,
+    recentPlace: (activityRow?.place as string | null | undefined) ?? null,
+    recentActivityPhoto: activityMedia[0]?.url ?? null,
+    recentFavoritePhotos,
+  };
+}

@@ -20,44 +20,66 @@ const CARD_STYLE: Record<
 };
 
 /**
- * One hero card in the Drop type grid. `preview` is a small type-specific
- * hint (a couple of thumbnails, a scrap of real caption text, …) so six
- * cards don't read as six identical icon buttons. Laid out top-to-bottom
- * in normal flow (icon+chevron, then label/subtitle, then the preview
- * pinned to the bottom via `mt-auto`) rather than absolutely positioned —
- * a stray preview can never overlap the label/subtitle text this way, no
- * matter how long a real caption or place name turns out to be.
+ * One card in the Drop type grid. `preview` is a small type-specific hint
+ * (a couple of thumbnails, a scrap of real caption text, …) so six cards
+ * don't read as six identical icon buttons. Laid out top-to-bottom in
+ * normal flow (icon+chevron, then label, then the preview pinned to the
+ * bottom via `mt-auto`) rather than absolutely positioned — a stray
+ * preview can never overlap the label this way.
+ *
+ * `bgImage`, when there's a real photo to show (a recent Photo, the
+ * current Song's artwork, a photo attached to a recent Activity), turns
+ * the card into a full-bleed hero: the real photo as background, a dark
+ * gradient for legibility, white text. Never a stock/placeholder image —
+ * a type with nothing real yet just stays a plain flat-color card.
  */
 export function DropTypeCard({
   type,
   onSelect,
+  bgImage,
   preview,
 }: {
   type: DropType;
   onSelect: () => void;
+  bgImage?: string | null;
   preview?: React.ReactNode;
 }) {
   const { bg, iconBg, iconColor, label, icon: Icon } = CARD_STYLE[type];
+  const hero = !!bgImage;
 
   return (
     <button
       type="button"
       onClick={onSelect}
-      className="flex min-h-[122px] flex-col rounded-[22px] px-3.5 py-3 text-left transition active:scale-[0.98]"
-      style={{ backgroundColor: bg }}
+      className="relative flex min-h-[136px] flex-col overflow-hidden rounded-[22px] px-3.5 py-3 text-left transition active:scale-[0.98]"
+      style={hero ? undefined : { backgroundColor: bg }}
     >
-      <div className="flex items-start justify-between">
-        <span className="grid h-10 w-10 place-items-center rounded-xl" style={{ backgroundColor: iconBg, color: iconColor }}>
+      {hero && (
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={bgImage!} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-black/5" />
+        </>
+      )}
+
+      <div className="relative flex items-start justify-between">
+        <span
+          className="grid h-10 w-10 place-items-center rounded-xl"
+          style={{ backgroundColor: hero ? "rgba(255,255,255,0.22)" : iconBg, color: hero ? "#fff" : iconColor }}
+        >
           <Icon size={20} strokeWidth={2} />
         </span>
-        <span className="-m-2 grid h-8 w-8 place-items-center">
-          <ChevronRight size={17} className="text-[#00000060]" />
+        <span
+          className="-m-2 grid h-8 w-8 place-items-center rounded-full"
+          style={hero ? { backgroundColor: "rgba(0,0,0,0.35)" } : undefined}
+        >
+          <ChevronRight size={17} className={hero ? "text-white" : "text-[#00000060]"} />
         </span>
       </div>
 
-      <p className="mt-2 text-[15px] font-bold leading-tight text-[#2c281f]">{label}</p>
+      <p className={`relative mt-2 text-[15px] font-bold leading-tight ${hero ? "text-white" : "text-[#2c281f]"}`}>{label}</p>
 
-      {preview && <div className="mt-auto min-w-0 pt-2">{preview}</div>}
+      {preview && <div className="relative mt-auto min-w-0 pt-2">{preview}</div>}
     </button>
   );
 }

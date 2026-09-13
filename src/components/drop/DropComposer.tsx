@@ -40,18 +40,23 @@ export function DropComposer({
   type,
   isStory,
   collections,
+  initialCaption,
   onClose,
 }: {
   type: DropType;
   isStory: boolean;
   collections: { id: string; name: string }[];
+  /** Prefills the caption field -- used when the quick-capture bar on the
+   * Drop landing page already collected what to say before a type (text)
+   * was even chosen. */
+  initialCaption?: string;
   onClose: () => void;
 }) {
   const { userId, space, otherMember } = useSession();
   const { show } = useToast();
   const router = useRouter();
 
-  const [caption, setCaption] = useState("");
+  const [caption, setCaption] = useState(initialCaption ?? "");
   const [place, setPlace] = useState("");
   const [tags, setTags] = useState("");
   const [collectionId, setCollectionId] = useState("");

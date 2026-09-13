@@ -1,22 +1,26 @@
-// Built-in prompt packs so Play works without any AI dependency.
-// Categories: Music, Football, Movies, Games, Food, Places, Random,
-// Internet culture, Preferences.
-
+// Built-in prompt packs so Play works without any AI dependency -- the
+// last-resort fallback when a real provider pool comes up short.
+//
+// Per the global image-first Play rule, a fallback entry must never
+// name a concrete, visualizable entity (a specific person, franchise,
+// game, dish, or place -- exactly the "FIFA vs Call of Duty" pattern
+// the rule exists to prevent) unless a real image source exists for it.
+// Movies/TV/people now have one (TMDb) and are served as real,
+// image-backed rounds by pickChoicePrompt/pickBlindRankPrompt/
+// pickKeepDropPrompt directly -- they don't need a text duplicate here.
+// Football, Games, Food, and Places have no image provider yet, so
+// their entity-naming prompts are deliberately left out of these packs
+// rather than shown as naked text; only genuinely abstract preferences/
+// activities (no single "thing" to picture) remain.
 export type ThisOrThatPrompt = { optionA: string; optionB: string; category: string };
 export const THIS_OR_THAT_PACK: ThisOrThatPrompt[] = [
   { category: "Music", optionA: "Studio album", optionB: "Live album" },
   { category: "Music", optionA: "Vinyl", optionB: "Streaming" },
-  { category: "Football", optionA: "Messi", optionB: "Ronaldo" },
   { category: "Football", optionA: "Watch at the stadium", optionB: "Watch at home" },
   { category: "Movies", optionA: "Cinema", optionB: "Home cinema night" },
-  { category: "Movies", optionA: "Marvel", optionB: "DC" },
-  { category: "Games", optionA: "FIFA", optionB: "Call of Duty" },
-  { category: "Food", optionA: "Pizza", optionB: "Burgers" },
   { category: "Food", optionA: "Sweet", optionB: "Savory" },
-  { category: "Places", optionA: "Beach trip", optionB: "Mountain trip" },
   { category: "Random", optionA: "Morning person", optionB: "Night owl" },
   { category: "Random", optionA: "Texting", optionB: "Calling" },
-  { category: "Internet culture", optionA: "TikTok", optionB: "Reels" },
   { category: "Preferences", optionA: "Window seat", optionB: "Aisle seat" },
 ];
 
@@ -54,7 +58,6 @@ export type GuessMinePrompt = { question: string; optionA: string; optionB: stri
 export const GUESS_MINE_PACK: GuessMinePrompt[] = [
   { category: "Preferences", question: "Late night drive or stay home?", optionA: "Late night drive", optionB: "Stay home" },
   { category: "Food", question: "Cook at home or order in?", optionA: "Cook at home", optionB: "Order in" },
-  { category: "Random", question: "Beach or mountains?", optionA: "Beach", optionB: "Mountains" },
   { category: "Football", question: "Home game or away game?", optionA: "Home game", optionB: "Away game" },
 ];
 
@@ -64,11 +67,6 @@ export const KEEP3_DROP2_PACK: Keep3Drop2Prompt[] = [
     category: "Movies",
     topic: "You can only keep 3 genres",
     items: ["Comedy", "Action", "Romance", "Horror", "Drama"],
-  },
-  {
-    category: "Food",
-    topic: "You can only keep 3 snacks forever",
-    items: ["Chips", "Chocolate", "Fruit", "Nuts", "Ice cream"],
   },
 ];
 

@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { notify } from "@/services/notify-client";
 import type { Json } from "@/lib/types";
+import type { GameSessionRow } from "@/lib/game-types";
 
 export type GameType =
   | "this_or_that"
@@ -12,6 +13,27 @@ export type GameType =
   | "guess_mine"
   | "keep3_drop2";
 
+/** Thrown by createGameSession when the caller has already started
+ * DAILY_PLAY_CAP sessions of this game type today -- lets callers show
+ * a "Done for today" state instead of a generic error toast. The real
+ * enforcement lives server-side in /api/play/session; this is just a
+ * typed way for the client to recognize that specific rejection. */
+export class DailyCapReachedError extends Error {
+  limit: number;
+  constructor(limit: number) {
+    super("Done for today");
+    this.name = "DailyCapReachedError";
+    this.limit = limit;
+  }
+}
+
+/**
+ * Creates a new game_sessions row via Keeps' own server route rather
+ * than inserting directly from the browser -- /api/play/session is the
+ * only place that ever counts today's plays and enforces the daily cap
+ * before the row exists, so no client-side path (refresh, a new tab, a
+ * new route, reopening the game) can create a 6th round today.
+ */
 export async function createGameSession(input: {
   spaceId: string;
   createdBy: string;
@@ -20,40 +42,27 @@ export async function createGameSession(input: {
   topic: string;
   category?: string;
   prompt: Record<string, unknown>;
-}) {
+}): Promise<GameSessionRow> {
   const start = performance.now();
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("game_sessions")
-    .insert({
-      space_id: input.spaceId,
-      game_type: input.gameType,
-      topic: input.topic,
-      category: input.category || null,
-      prompt: input.prompt as Json,
-      created_by: input.createdBy,
-    })
-    .select()
-    .single();
-  if (error) throw error;
-  console.log("[perf] session_creation", { gameType: input.gameType, ms: Math.round(performance.now() - start) });
-
-  // Fire-and-forget: the partner's notification doesn't need to block
-  // this player's navigation into the new round -- per the perf pass,
-  // "New round" should feel instant, not wait on a second DB write.
-  if (input.otherMemberId) {
-    void notify({
+  const res = await fetch("/api/play/session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
       spaceId: input.spaceId,
-      userId: input.otherMemberId,
-      type: "game_invite",
-      category: "play",
-      title: `New ${gameLabel(input.gameType)} challenge`,
-      body: input.topic,
-      data: { sessionId: data.id, gameType: input.gameType },
-    });
+      otherMemberId: input.otherMemberId,
+      gameType: input.gameType,
+      topic: input.topic,
+      category: input.category,
+      prompt: input.prompt,
+    }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (res.status === 403 && body.error === "daily_cap_reached") {
+    throw new DailyCapReachedError(body.limit ?? 5);
   }
-
-  return data;
+  if (!res.ok) throw new Error(body.error || "Couldn't start a new round.");
+  console.log("[perf] session_creation", { gameType: input.gameType, ms: Math.round(performance.now() - start) });
+  return body.session as GameSessionRow;
 }
 
 /** Persists a swapped-in round ("Don't know this?") to the session row

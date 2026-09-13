@@ -38,12 +38,19 @@ function logMoviePoolRequest(entry: {
   requestedKind: Kind;
   requestedCount: number;
   providerUsed: string;
-  liveItemCount: number;
+  tmdbHttpStatus: number | null;
+  candidateCount: number;
+  rejectedForNoImage: number;
+  rejectedForRecognizability: number;
+  finalItemCount: number;
   failed: boolean;
   durationMs: number;
   excludeAndFamiliarityMs: number;
   providerFetchMs: number;
 }) {
+  // Temporary, verbose live-verification logging (product audit
+  // request) -- deliberately never includes the TMDb token or any other
+  // secret, only counts and a status code.
   console.log("[play/movie-pool]", JSON.stringify(entry));
 }
 
@@ -71,7 +78,7 @@ export async function GET(req: NextRequest) {
   }
 
   const providerFetchStart = Date.now();
-  const { items, failed } = await fetchByKind(kind, count, exclude, profile);
+  const { items, failed, diagnostics } = await fetchByKind(kind, count, exclude, profile);
   const providerFetchMs = Date.now() - providerFetchStart;
 
   // No "Keeps' own drops" tier exists for movies/TV (unlike music,
@@ -85,7 +92,11 @@ export async function GET(req: NextRequest) {
     requestedKind: kind,
     requestedCount: count,
     providerUsed: provider,
-    liveItemCount: items.length,
+    tmdbHttpStatus: diagnostics.httpStatus,
+    candidateCount: diagnostics.candidateCount,
+    rejectedForNoImage: diagnostics.rejectedForNoImage,
+    rejectedForRecognizability: diagnostics.rejectedForRecognizability,
+    finalItemCount: items.length,
     failed,
     durationMs: Date.now() - start,
     excludeAndFamiliarityMs,

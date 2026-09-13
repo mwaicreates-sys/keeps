@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, HelpCircle } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
-import { createGameSession, submitGameAnswer, updateGameSessionPrompt } from "@/services/games-client";
+import { createGameSession, submitGameAnswer, updateGameSessionPrompt, DailyCapReachedError } from "@/services/games-client";
 import { getGameSession } from "@/services/games-read-client";
 import { warmAllKeepDropKinds, pickKeepDropPrompt, swapKeepDropItem, KEEP_COUNT, type KeepDropPrompt } from "@/lib/keep-drop-prompt";
 import { sourceForKind } from "@/lib/play-content-categories";
@@ -13,6 +13,7 @@ import { recordPlaySignal, recordPlaySignalForItems } from "@/services/play-sign
 import { usePollForResult } from "@/hooks/usePollForResult";
 import { playGame } from "@/lib/play-config";
 import { RoundHeader } from "@/components/play/RoundHeader";
+import { DAILY_PLAY_CAP } from "@/lib/game-types";
 import { RoundTagline } from "@/components/play/RoundTagline";
 import { getErrorMessage } from "@/lib/utils";
 import type { GameSessionRow } from "@/lib/game-types";
@@ -143,6 +144,10 @@ export function KeepDropRound({ session: initialSession, roundNumber }: { sessio
       });
       router.push(`/play/keep3-drop2/${created.id}`);
     } catch (err) {
+      if (err instanceof DailyCapReachedError) {
+        router.push("/play/keep3-drop2");
+        return;
+      }
       show(getErrorMessage(err, "Couldn't start the next round."), "error");
       setStartingNext(false);
     }
@@ -158,6 +163,7 @@ export function KeepDropRound({ session: initialSession, roundNumber }: { sessio
         pillBg={game.bg}
         pillColor={game.iconColor}
         roundNumber={roundNumber}
+        roundTotal={DAILY_PLAY_CAP}
         question={question}
       />
 

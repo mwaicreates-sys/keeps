@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { HelpCircle } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
-import { createGameSession, submitGameAnswer, updateGameSessionPrompt, type GameType } from "@/services/games-client";
+import { createGameSession, submitGameAnswer, updateGameSessionPrompt, DailyCapReachedError, type GameType } from "@/services/games-client";
 import { getGameSession } from "@/services/games-read-client";
 import { pickChoicePrompt, warmAllChoiceKinds, type ChoicePrompt } from "@/lib/choice-prompt";
 import { sourceForKind } from "@/lib/play-content-categories";
@@ -13,6 +13,7 @@ import { recordPlaySignal, recordPlaySignalForItems } from "@/services/play-sign
 import { usePollForResult } from "@/hooks/usePollForResult";
 import { playGame } from "@/lib/play-config";
 import { RoundHeader } from "@/components/play/RoundHeader";
+import { DAILY_PLAY_CAP } from "@/lib/game-types";
 import { RoundTagline } from "@/components/play/RoundTagline";
 import { getErrorMessage } from "@/lib/utils";
 import type { GameSessionRow } from "@/lib/game-types";
@@ -139,6 +140,13 @@ export function ChoiceGameRound({
       });
       router.push(`/play/${slug}/${created.id}`);
     } catch (err) {
+      if (err instanceof DailyCapReachedError) {
+        // The daily cap was hit exactly on this attempt -- the base
+        // route now redirects/gates on the same check, so send the
+        // player there instead of showing a raw error toast.
+        router.push(`/play/${slug}`);
+        return;
+      }
       show(getErrorMessage(err, "Couldn't start the next round."), "error");
       setStartingNext(false);
     }
@@ -154,6 +162,7 @@ export function ChoiceGameRound({
         pillBg={game.bg}
         pillColor={game.iconColor}
         roundNumber={roundNumber}
+        roundTotal={DAILY_PLAY_CAP}
         question={question}
       />
 
@@ -240,27 +249,26 @@ export function ChoiceGameRound({
           </button>
         </div>
       ) : (
+        // Text-only fallback (rare -- only when the provider pool comes
+        // up short, see pickChoicePrompt) gets the same tap-locks-in-
+        // immediately behavior as the visual path, per the auto-advance
+        // rule: no separate "Lock it in" confirm step for a simple
+        // two-option choice.
         <div className="space-y-2.5">
           {[prompt.optionA, prompt.optionB].map((opt) => (
             <button
               key={opt}
               type="button"
-              onClick={() => setChoice(opt)}
+              onClick={() => !submitting && submit(opt)}
+              disabled={submitting}
               className={`flex w-full items-center justify-between rounded-2xl px-4 py-4 text-left text-[15.5px] font-semibold transition ${
-                choice === opt ? "bg-[#3a362f] text-white" : "bg-[#f7f5f1] text-[#3a362f]"
-              }`}
+                choice === opt ? "scale-[0.99] bg-[#3a362f] text-white" : "bg-[#f7f5f1] text-[#3a362f]"
+              } ${choice && choice !== opt ? "opacity-60" : ""}`}
             >
               {opt}
             </button>
           ))}
-          <button
-            type="button"
-            onClick={() => choice && submit(choice)}
-            disabled={!choice || submitting}
-            className="mt-2 w-full rounded-full bg-[#3a362f] py-3.5 text-[15.5px] font-semibold text-white transition active:scale-[0.98] disabled:opacity-50"
-          >
-            {submitting ? "Submitting…" : "Lock it in"}
-          </button>
+          <p className="text-center text-[12.5px] text-[#a39d92]">{submitting ? "Locking it in…" : "Tap to choose"}</p>
         </div>
       )}
 

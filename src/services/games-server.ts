@@ -33,7 +33,12 @@ export async function getGameSession(id: string): Promise<GameSessionRow | null>
 /** Purely cosmetic "N of 10" round counter for the active-gameplay
  * header -- counts how many sessions of this game type existed at or
  * before this one (by created_at) and cycles 1-10. Never gates anything;
- * just gives the round screen a sense of progress. */
+ * just gives the round screen a sense of progress.
+ *
+ * @deprecated superseded by getDailyPlayCount, which reflects the real
+ * daily cap (per user, per game type) instead of an all-time, both-
+ * players cycling count. Kept only until every call site is confirmed
+ * migrated; do not add new callers. */
 export async function getGameSessionRoundNumber(spaceId: string, gameType: GameType, createdAt: string): Promise<number> {
   const supabase = await createClient();
   const { count, error } = await supabase
@@ -45,6 +50,41 @@ export async function getGameSessionRoundNumber(spaceId: string, gameType: GameT
   if (error) throw error;
   const total = count ?? 1;
   return ((total - 1) % 10) + 1;
+}
+
+function startOfUtcDay(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}
+
+/**
+ * Real daily-cap counter: how many sessions of this game type has this
+ * specific user *started* today (UTC calendar day)? Used both to render
+ * "N of 5"/"Done for today" and, server-side in /api/play/session, as
+ * the actual gate on creating a new one -- the same function backs both
+ * the display and the enforcement, so they can't drift apart.
+ *
+ * Day boundary is UTC rather than the player's local timezone: simple,
+ * unambiguous, and consistent regardless of which device/timezone either
+ * space member is in. `upToCreatedAt` restricts the count to sessions at
+ * or before that moment (used to show "this session was your Nth today"
+ * on an already-created round, as opposed to "how many have I made
+ * *before* creating another").
+ */
+export async function getDailyPlayCount(spaceId: string, gameType: GameType, userId: string, upToCreatedAt?: string): Promise<number> {
+  const supabase = await createClient();
+  const reference = upToCreatedAt ? new Date(upToCreatedAt) : new Date();
+  const dayStart = startOfUtcDay(reference).toISOString();
+  let query = supabase
+    .from("game_sessions")
+    .select("id", { count: "exact", head: true })
+    .eq("space_id", spaceId)
+    .eq("game_type", gameType)
+    .eq("created_by", userId)
+    .gte("created_at", dayStart);
+  if (upToCreatedAt) query = query.lte("created_at", upToCreatedAt);
+  const { count, error } = await query;
+  if (error) throw error;
+  return count ?? 0;
 }
 
 /** Server-side counterpart to match-predictions-read-client.ts's listFixtures. */

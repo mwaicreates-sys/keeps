@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import { RotateCcw } from "lucide-react";
+import { RotateCcw, CheckCircle2 } from "lucide-react";
+import { DailyCapReachedError } from "@/services/games-client";
 
 /**
  * The shared "starting a game" screen -- shown for the instant between
@@ -24,20 +25,26 @@ export function GameLauncher({
   iconColor: string;
   /** Starts (or resumes) the round and navigates there. Thrown errors
    * are caught and shown with a retry button -- the player is never
-   * left on a silent blank screen if the round fails to generate. */
+   * left on a silent blank screen if the round fails to generate. A
+   * DailyCapReachedError specifically shows "Done for today" rather
+   * than a retry (retrying would just fail the same way again -- this
+   * is the server enforcing the daily cap, not a transient failure). */
   start: () => Promise<void>;
 }) {
   const [failed, setFailed] = useState(false);
+  const [capped, setCapped] = useState(false);
   const startingRef = useRef(false);
 
   async function run() {
     if (startingRef.current) return;
     startingRef.current = true;
     setFailed(false);
+    setCapped(false);
     try {
       await start();
-    } catch {
-      setFailed(true);
+    } catch (err) {
+      if (err instanceof DailyCapReachedError) setCapped(true);
+      else setFailed(true);
     } finally {
       startingRef.current = false;
     }
@@ -51,9 +58,16 @@ export function GameLauncher({
   return (
     <div className="flex min-h-[70vh] flex-col items-center justify-center px-6 text-center">
       <div className="mb-5 grid h-16 w-16 place-items-center rounded-full" style={{ backgroundColor: bg, color: iconColor }}>
-        <Icon size={26} className={failed ? "" : "animate-pulse"} />
+        {capped ? <CheckCircle2 size={26} /> : <Icon size={26} className={failed ? "" : "animate-pulse"} />}
       </div>
-      {failed ? (
+      {capped ? (
+        <>
+          <p className="text-[15px] font-semibold text-[#3a362f]">Done for today</p>
+          <p className="mt-1 text-[13px] text-[#a39d92]">
+            You&apos;ve played {label} 5 times today -- come back tomorrow for more.
+          </p>
+        </>
+      ) : failed ? (
         <>
           <p className="text-[15px] font-semibold text-[#3a362f]">Couldn&apos;t start {label}</p>
           <p className="mt-1 text-[13px] text-[#a39d92]">Check your connection and try again.</p>

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { RotateCcw, HelpCircle } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
-import { createGameSession, submitGameAnswer, updateGameSessionPrompt } from "@/services/games-client";
+import { createGameSession, submitGameAnswer, updateGameSessionPrompt, DailyCapReachedError } from "@/services/games-client";
 import { getGameSession } from "@/services/games-read-client";
 import { pickBlindRankPrompt, swapBlindRankItem, warmAllBlindRankKinds, type BlindRankPrompt } from "@/lib/blind-rank-prompt";
 import { sourceForKind } from "@/lib/play-content-categories";
@@ -13,6 +13,7 @@ import { recordPlaySignal, recordPlaySignalForItems } from "@/services/play-sign
 import { usePollForResult } from "@/hooks/usePollForResult";
 import { playGame } from "@/lib/play-config";
 import { RoundHeader } from "@/components/play/RoundHeader";
+import { DAILY_PLAY_CAP } from "@/lib/game-types";
 import { RoundTagline } from "@/components/play/RoundTagline";
 import { getErrorMessage } from "@/lib/utils";
 import type { GameSessionRow } from "@/lib/game-types";
@@ -137,6 +138,10 @@ export function BlindRankRound({ session: initialSession, roundNumber }: { sessi
       });
       router.push(`/play/blind-rank/${created.id}`);
     } catch (err) {
+      if (err instanceof DailyCapReachedError) {
+        router.push("/play/blind-rank");
+        return;
+      }
       show(getErrorMessage(err, "Couldn't start the next round."), "error");
       setStartingNext(false);
     }
@@ -152,6 +157,7 @@ export function BlindRankRound({ session: initialSession, roundNumber }: { sessi
         pillBg={game.bg}
         pillColor={game.iconColor}
         roundNumber={roundNumber}
+        roundTotal={DAILY_PLAY_CAP}
         question={session.topic}
       />
 

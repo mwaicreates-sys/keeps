@@ -1,5 +1,13 @@
 import type { Tables } from "@/lib/types";
 
+/** Maximum number of rounds of a given game type one user may *start*
+ * (i.e. call createGameSession for) per calendar day, UTC. Shared
+ * between the server-side enforcement in /api/play/session and every
+ * launcher page's "Done for today" gate, so both sides always agree on
+ * the same number. Per-game-type, per-user, per-day -- not shared
+ * across game types and not reduced by the partner's own plays. */
+export const DAILY_PLAY_CAP = 5;
+
 /**
  * A game_sessions row plus just enough of its related tables to render a
  * history list and a completed result — `game_answers` only carries

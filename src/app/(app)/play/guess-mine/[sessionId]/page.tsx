@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getSessionContext } from "@/services/session";
-import { getGameSession, getGameSessionRoundNumber } from "@/services/games-server";
+import { getGameSession, getDailyPlayCount } from "@/services/games-server";
 import { ChoiceGameRound } from "@/components/play/ChoiceGameRound";
 
 // The actual immersive gameplay screen -- distinct from the history
@@ -14,7 +14,7 @@ export default async function GuessMineRoundPage({ params }: { params: Promise<{
 
   const session = await getGameSession(sessionId);
   if (!session || session.space_id !== ctx.space.id || session.game_type !== "guess_mine") notFound();
-  const roundNumber = await getGameSessionRoundNumber(ctx.space.id, "guess_mine", session.created_at);
+  const roundNumber = await getDailyPlayCount(ctx.space.id, "guess_mine", session.created_by, session.created_at);
 
   return (
     <div className="mx-auto w-full max-w-xl pb-4 md:max-w-2xl md:py-4">

@@ -4,13 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
-import { createGameSession, submitGameAnswer } from "@/services/games-client";
+import { createGameSession, submitGameAnswer, DailyCapReachedError } from "@/services/games-client";
 import { getGameSession } from "@/services/games-read-client";
 import { saveTop5List } from "@/services/top5-client";
 import { pickTop5Prompt, type Top5Prompt } from "@/lib/top5-prompt";
 import { usePollForResult } from "@/hooks/usePollForResult";
 import { playGame } from "@/lib/play-config";
 import { RoundHeader } from "@/components/play/RoundHeader";
+import { DAILY_PLAY_CAP } from "@/lib/game-types";
 import { RoundTagline } from "@/components/play/RoundTagline";
 import { getErrorMessage } from "@/lib/utils";
 import type { GameSessionRow } from "@/lib/game-types";
@@ -80,6 +81,10 @@ export function Top5Round({ session: initialSession, roundNumber }: { session: G
       });
       router.push(`/play/top5/${created.id}`);
     } catch (err) {
+      if (err instanceof DailyCapReachedError) {
+        router.push("/play/top5");
+        return;
+      }
       show(getErrorMessage(err, "Couldn't start the next round."), "error");
       setStartingNext(false);
     }
@@ -95,6 +100,7 @@ export function Top5Round({ session: initialSession, roundNumber }: { session: G
         pillBg={game.bg}
         pillColor={game.iconColor}
         roundNumber={roundNumber}
+        roundTotal={DAILY_PLAY_CAP}
         question={session.topic}
       />
 

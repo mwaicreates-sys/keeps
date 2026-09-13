@@ -1,4 +1,4 @@
-import { tmdbGet, tmdbImageUrl, tmdbSourceUrl } from "@/lib/tmdb/client";
+import { tmdbGet, tmdbImageUrl, tmdbSourceUrl, TmdbHttpError, TmdbConfigError } from "@/lib/tmdb/client";
 import { getCachedContentItem, setCachedContentItem } from "@/services/play-providers/content-cache";
 import { rankByFamiliarity, type FamiliarityProfile } from "@/services/play-providers/familiarity";
 import type { PlayItem } from "@/services/play-providers/types";
@@ -21,7 +21,18 @@ const NO_PROFILE: FamiliarityProfile = {
  * TMDb" and "actually recognizable to these two players" are treated
  * as two separate filters, same lesson as the music-provider pass.
  */
-export type MovieFetchResult = { items: PlayItem[]; failed: boolean };
+/** Temporary, verbose diagnostics for the TMDb live-verification pass --
+ * every field the product audit asked for, so a server log line alone
+ * (never the browser, never a secret) proves whether TMDb is actually
+ * responding with real data or silently coming up empty. Cheap to leave
+ * in; nothing here is PII or credentials. */
+export type MovieFetchDiagnostics = {
+  httpStatus: number | null;
+  candidateCount: number;
+  rejectedForNoImage: number;
+  rejectedForRecognizability: number;
+};
+export type MovieFetchResult = { items: PlayItem[]; failed: boolean; diagnostics: MovieFetchDiagnostics };
 
 const POSTER_SIZE = "w500"; // ~500px wide -- plenty for a card rendering at 180-300px, a fraction of the original file
 const PROFILE_SIZE = "w342";
@@ -32,6 +43,17 @@ const PROFILE_SIZE = "w342";
 // diagnostics show the pool coming up empty.
 const MIN_VOTE_COUNT = 500;
 const MIN_VOTE_AVERAGE = 5.5;
+
+/** Best-effort HTTP status for the diagnostics log -- tmdbGet throws
+ * before ever handing back a non-2xx response, so a successful call
+ * only ever reaches here as "200"; a thrown TmdbHttpError carries the
+ * real status, and a missing token surfaces as its own distinct code
+ * (0) so "misconfigured" is never confused with "TMDb said no." */
+function httpStatusFromError(err: unknown): number | null {
+  if (err instanceof TmdbHttpError) return err.status;
+  if (err instanceof TmdbConfigError) return 0;
+  return null;
+}
 
 function randomPopularPage(): number {
   // Discover is sorted by popularity.desc; each page is 20 results, so
@@ -97,7 +119,14 @@ export async function getMoviePlayItems(count: number, exclude: Set<string> = ne
       `/discover/movie?sort_by=popularity.desc&vote_count.gte=${MIN_VOTE_COUNT}&vote_average.gte=${MIN_VOTE_AVERAGE}&include_adult=false&page=${page}`,
       60 * 60 * 6
     );
+    const rawCount = data.results?.length ?? 0;
+    // The recognizability floor (MIN_VOTE_COUNT/MIN_VOTE_AVERAGE) is a
+    // TMDb *query* param, not a post-hoc filter -- every raw result here
+    // already cleared it, so "rejected for recognizability" is 0 by
+    // construction for this endpoint; the floor itself is what's doing
+    // that rejection before this code ever sees a response.
     const candidates = (data.results ?? []).filter((m) => m.poster_path && !exclude.has(String(m.id)));
+    const rejectedForNoImageAtSource = rawCount - (data.results ?? []).filter((m) => m.poster_path).length;
     // Overfetch beyond `count` before resolving/caching -- some
     // candidates will turn out to have no cached-usable image (rare,
     // since we already filtered on poster_path, but the cache can carry
@@ -119,9 +148,10 @@ export async function getMoviePlayItems(count: number, exclude: Set<string> = ne
       )
     );
     const items = resolved.filter((i): i is PlayItem => i !== null).slice(0, count);
-    return { items, failed: false };
-  } catch {
-    return { items: [], failed: true };
+    const rejectedForNoImage = rejectedForNoImageAtSource + (resolved.length - items.length);
+    return { items, failed: false, diagnostics: { httpStatus: 200, candidateCount: rawCount, rejectedForNoImage, rejectedForRecognizability: 0 } };
+  } catch (err) {
+    return { items: [], failed: true, diagnostics: { httpStatus: httpStatusFromError(err), candidateCount: 0, rejectedForNoImage: 0, rejectedForRecognizability: 0 } };
   }
 }
 
@@ -132,7 +162,9 @@ export async function getTvPlayItems(count: number, exclude: Set<string> = new S
       `/discover/tv?sort_by=popularity.desc&vote_count.gte=${MIN_VOTE_COUNT}&vote_average.gte=${MIN_VOTE_AVERAGE}&include_adult=false&page=${page}`,
       60 * 60 * 6
     );
+    const rawCount = data.results?.length ?? 0;
     const candidates = (data.results ?? []).filter((t) => t.poster_path && !exclude.has(String(t.id)));
+    const rejectedForNoImageAtSource = rawCount - (data.results ?? []).filter((t) => t.poster_path).length;
     const ranked = rankByFamiliarity(
       candidates.map((t) => ({ id: String(t.id), title: t.name, subtitle: t.first_air_date?.slice(0, 4) ?? null })),
       profile,
@@ -150,9 +182,10 @@ export async function getTvPlayItems(count: number, exclude: Set<string> = new S
       )
     );
     const items = resolved.filter((i): i is PlayItem => i !== null).slice(0, count);
-    return { items, failed: false };
-  } catch {
-    return { items: [], failed: true };
+    const rejectedForNoImage = rejectedForNoImageAtSource + (resolved.length - items.length);
+    return { items, failed: false, diagnostics: { httpStatus: 200, candidateCount: rawCount, rejectedForNoImage, rejectedForRecognizability: 0 } };
+  } catch (err) {
+    return { items: [], failed: true, diagnostics: { httpStatus: httpStatusFromError(err), candidateCount: 0, rejectedForNoImage: 0, rejectedForRecognizability: 0 } };
   }
 }
 
@@ -160,6 +193,10 @@ export async function getPersonPlayItems(count: number, exclude: Set<string> = n
   try {
     const page = 1 + Math.floor(Math.random() * 3); // /person/popular is a much smaller, curated-feeling list -- fewer pages needed
     const data = await tmdbGet<{ results?: TmdbPerson[] }>(`/person/popular?page=${page}`, 60 * 60 * 6);
+    const rawCount = data.results?.length ?? 0;
+    const withImageField = (data.results ?? []).filter((p) => p.profile_path);
+    const rejectedForRecognizability = withImageField.filter((p) => p.known_for_department !== "Acting").length;
+    const rejectedForNoImageAtSource = rawCount - withImageField.length;
     const candidates = (data.results ?? []).filter(
       (p) => p.profile_path && p.known_for_department === "Acting" && !exclude.has(String(p.id))
     );
@@ -180,8 +217,9 @@ export async function getPersonPlayItems(count: number, exclude: Set<string> = n
       )
     );
     const items = resolved.filter((i): i is PlayItem => i !== null).slice(0, count);
-    return { items, failed: false };
-  } catch {
-    return { items: [], failed: true };
+    const rejectedForNoImage = rejectedForNoImageAtSource + (resolved.length - items.length);
+    return { items, failed: false, diagnostics: { httpStatus: 200, candidateCount: rawCount, rejectedForNoImage, rejectedForRecognizability } };
+  } catch (err) {
+    return { items: [], failed: true, diagnostics: { httpStatus: httpStatusFromError(err), candidateCount: 0, rejectedForNoImage: 0, rejectedForRecognizability: 0 } };
   }
 }

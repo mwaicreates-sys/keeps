@@ -63,7 +63,7 @@ export function NotificationsList({ notifications, userId }: { notifications: Ta
               setItems((prev) => prev.map((n) => ({ ...n, read_at: new Date().toISOString() })));
               await markAllNotificationsRead(userId);
             }}
-            className="rounded-full bg-white px-3.5 py-2 text-[13px] font-medium text-[#3a362f] shadow-[0_2px_10px_-6px_rgba(20,18,15,0.12)]"
+            className="rounded-full bg-white px-3 py-1.5 text-[11.5px] font-medium text-[#3a362f] shadow-[0_2px_10px_-6px_rgba(20,18,15,0.12)]"
           >
             Mark all read
           </button>
@@ -85,22 +85,22 @@ export function NotificationsList({ notifications, userId }: { notifications: Ta
                     router.push(targetHref(n));
                   }}
                   className={cn(
-                    "flex w-full items-start gap-3 rounded-2xl bg-white px-3.5 py-3 text-left shadow-[0_2px_10px_-6px_rgba(20,18,15,0.12)]",
+                    "flex w-full items-start gap-2.5 rounded-xl bg-white px-3 py-2.5 text-left shadow-[0_2px_10px_-6px_rgba(20,18,15,0.12)]",
                     !n.read_at && "ring-1 ring-[#3b82f6]/25"
                   )}
                 >
                   <span
-                    className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl"
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-xl"
                     style={{ backgroundColor: style.bg, color: style.color }}
                   >
-                    <Icon size={20} strokeWidth={2} />
+                    <Icon size={17} strokeWidth={2} />
                   </span>
                   <div className="min-w-0 flex-1 py-0.5">
-                    <p className="truncate text-[14.5px] font-semibold text-[#3a362f]">{n.title}</p>
-                    {n.body && <p className="truncate text-[13.5px] text-[#7c766c]">{n.body}</p>}
-                    <p className="mt-0.5 text-[12px] text-[#a39d92]">{timeAgo(n.created_at)}</p>
+                    <p className="truncate text-[13px] font-semibold text-[#3a362f]">{n.title}</p>
+                    {n.body && <p className="truncate text-[11.5px] text-[#7c766c]">{n.body}</p>}
+                    <p className="mt-0.5 text-[10.5px] text-[#a39d92]">{timeAgo(n.created_at)}</p>
                   </div>
-                  {!n.read_at && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#3b82f6]" />}
+                  {!n.read_at && <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#3b82f6]" />}
                 </button>
               </li>
             );

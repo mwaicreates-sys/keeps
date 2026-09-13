@@ -8,7 +8,7 @@ export function MainSurface({ children }: { children: React.ReactNode }) {
   const isLight = usesHomeLightTheme(pathname);
 
   return (
-    <main className="min-h-full flex-1 bg-paper pb-24 md:pb-10" style={isLight ? HOME_LIGHT_THEME : undefined}>
+    <main className="min-h-full min-w-0 flex-1 bg-paper pb-24 md:pb-10" style={isLight ? HOME_LIGHT_THEME : undefined}>
       {children}
     </main>
   );

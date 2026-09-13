@@ -18,7 +18,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <SessionProvider value={ctx}>
       <AppThemeShell>
         <DesktopSidebar />
-        <div className="flex min-h-[100vh] flex-1 flex-col">
+        <div className="flex min-h-[100vh] min-w-0 flex-1 flex-col">
           <HideOnHome>
             <TopBar userId={ctx.userId} />
           </HideOnHome>

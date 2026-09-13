@@ -90,19 +90,24 @@ export type SearchShowcaseItem = {
  */
 export async function getSearchShowcase(spaceId: string): Promise<SearchShowcaseItem> {
   const supabase = await createClient();
+  // post_media and post_song_metadata have no created_at of their own —
+  // querying them directly (as this used to) and ordering by created_at
+  // fails silently (Supabase returns an error, not a thrown exception,
+  // so the missing photo/song went unnoticed). Query from posts instead
+  // (which does have created_at) with an inner-joined, filtered embed.
   const [{ data: photoRow }, { data: songRow }, { data: textRow }] = await Promise.all([
     supabase
-      .from("post_media")
-      .select("url, posts!inner(space_id)")
-      .eq("posts.space_id", spaceId)
-      .eq("media_type", "photo")
+      .from("posts")
+      .select("post_media!inner(url)")
+      .eq("space_id", spaceId)
+      .eq("post_media.media_type", "photo")
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
     supabase
-      .from("post_song_metadata")
-      .select("title, artist, posts!inner(space_id)")
-      .eq("posts.space_id", spaceId)
+      .from("posts")
+      .select("post_song_metadata!inner(title, artist)")
+      .eq("space_id", spaceId)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
@@ -117,9 +122,12 @@ export async function getSearchShowcase(spaceId: string): Promise<SearchShowcase
       .maybeSingle(),
   ]);
 
+  const photo = (photoRow?.post_media as { url: string }[] | null)?.[0] ?? null;
+  const song = (songRow?.post_song_metadata as { title: string; artist: string | null } | null) ?? null;
+
   return {
-    photo: photoRow ? { url: photoRow.url } : null,
-    song: songRow ? { title: songRow.title, artist: songRow.artist } : null,
+    photo: photo ? { url: photo.url } : null,
+    song: song ? { title: song.title, artist: song.artist } : null,
     text: textRow?.caption ? { caption: textRow.caption } : null,
   };
 }

@@ -67,19 +67,19 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
 
   return (
     <div className="mx-auto w-full max-w-xl pb-4 md:max-w-2xl md:py-4">
-      <div className="flex items-center gap-2 px-3 pb-3 pt-2">
-        <Link href="/home" aria-label="Back" className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[#3a362f]">
-          <ArrowLeft size={20} strokeWidth={2} />
+      <div className="flex items-center gap-3 px-3 pb-3 pt-2">
+        <Link href="/home" aria-label="Back" className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-[#3a362f]">
+          <ArrowLeft size={24} strokeWidth={2} />
         </Link>
         <form action="/search" className="min-w-0 flex-1">
-          <label className="flex items-center gap-2 rounded-full bg-white px-3.5 py-2 shadow-[0_1px_8px_-4px_rgba(20,18,15,0.15)]">
-            <SearchIcon size={16} strokeWidth={2} className="shrink-0 text-[#a39d92]" />
+          <label className="flex items-center gap-2.5 rounded-full bg-white px-4 py-3 shadow-[0_1px_8px_-4px_rgba(20,18,15,0.15)]">
+            <SearchIcon size={19} strokeWidth={2} className="shrink-0 text-[#a39d92]" />
             <input
               name="q"
               defaultValue={q}
               autoFocus
               placeholder="football, 2026, Kendrick, funny…"
-              className="w-full min-w-0 bg-transparent text-[13.5px] text-[#3a362f] outline-none placeholder:text-[#a39d92]"
+              className="w-full min-w-0 bg-transparent text-[16px] text-[#3a362f] outline-none placeholder:text-[#a39d92]"
             />
           </label>
         </form>

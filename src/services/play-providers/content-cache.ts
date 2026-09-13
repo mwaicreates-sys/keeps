@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import type { Json } from "@/lib/types";
 
 /**
  * A persistent, shared cache of already-resolved provider content --
@@ -136,6 +137,59 @@ export async function setCachedImage(itemType: string, itemId: string, imageUrl:
       image_url: imageUrl,
       updated_at: new Date().toISOString(),
       expires_at: new Date(Date.now() + ALBUM_TTL_SECONDS * 1000).toISOString(),
+    });
+  } catch {
+    // Best-effort only.
+  }
+}
+
+const CONTENT_ITEM_TTL_SECONDS = 60 * 60 * 24 * 14; // 2 weeks -- generic default for any resolved content item
+
+/** Generic version of getCachedArtistVisual/setCachedArtistVisual --
+ * caches a full resolved item (title, subtitle, image, arbitrary
+ * metadata) under any `itemType`. Used by the TMDb provider (movie/tv/
+ * person) so it never re-fetches TMDb for the same title twice; the
+ * music-specific functions above are kept as-is rather than refactored
+ * onto this, per "do not alter the existing music provider
+ * architecture." A resolved-but-imageless item is still a cache *hit*
+ * (imageUrl: null) -- no reason to re-fetch just because it has no
+ * usable image. */
+export type CachedContentItem = { title: string | null; subtitle: string | null; imageUrl: string | null; metadata: Record<string, unknown> };
+
+export async function getCachedContentItem(itemType: string, itemId: string): Promise<CachedContentItem | undefined> {
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .from("play_content_cache")
+      .select("title, subtitle, image_url, metadata")
+      .eq("item_type", itemType)
+      .eq("item_id", itemId)
+      .gt("expires_at", new Date().toISOString())
+      .maybeSingle();
+    if (!data) return undefined;
+    return { title: data.title, subtitle: data.subtitle, imageUrl: data.image_url, metadata: (data.metadata as Record<string, unknown>) ?? {} };
+  } catch {
+    return undefined;
+  }
+}
+
+export async function setCachedContentItem(
+  itemType: string,
+  itemId: string,
+  item: CachedContentItem,
+  ttlSeconds: number = CONTENT_ITEM_TTL_SECONDS
+): Promise<void> {
+  try {
+    const supabase = await createClient();
+    await supabase.from("play_content_cache").upsert({
+      item_type: itemType,
+      item_id: itemId,
+      title: item.title,
+      subtitle: item.subtitle,
+      image_url: item.imageUrl,
+      metadata: item.metadata as Json,
+      updated_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + ttlSeconds * 1000).toISOString(),
     });
   } catch {
     // Best-effort only.

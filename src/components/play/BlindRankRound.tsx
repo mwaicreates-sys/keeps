@@ -7,8 +7,8 @@ import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
 import { createGameSession, submitGameAnswer, updateGameSessionPrompt } from "@/services/games-client";
 import { getGameSession } from "@/services/games-read-client";
-import { prefetchMusicPool } from "@/services/music-pool-client";
-import { pickBlindRankPrompt, swapBlindRankItem, BLIND_RANK_FETCH_SIZE, type BlindRankPrompt } from "@/lib/blind-rank-prompt";
+import { pickBlindRankPrompt, swapBlindRankItem, warmAllBlindRankKinds, type BlindRankPrompt } from "@/lib/blind-rank-prompt";
+import { sourceForKind } from "@/lib/play-content-categories";
 import { recordPlaySignal, recordPlaySignalForItems } from "@/services/play-signals-client";
 import { usePollForResult } from "@/hooks/usePollForResult";
 import { playGame } from "@/lib/play-config";
@@ -40,7 +40,7 @@ export function BlindRankRound({ session: initialSession, roundNumber }: { sessi
   const result = session.game_results?.result as Result | undefined;
 
   useEffect(() => {
-    prefetchMusicPool("album", BLIND_RANK_FETCH_SIZE, space.id);
+    warmAllBlindRankKinds(space.id);
   }, [space.id]);
 
   usePollForResult(session.id, answeredByMe && !result, (fresh) => setSession(fresh));
@@ -70,8 +70,9 @@ export function BlindRankRound({ session: initialSession, roundNumber }: { sessi
         topic: session.topic,
       });
       if (prompt.ids) {
+        const kind = prompt.kind ?? "album";
         recordPlaySignalForItems(
-          prompt.items.filter((i) => prompt.ids?.[i]).map((i) => ({ id: prompt.ids![i], type: "album", source: "musicbrainz" })),
+          prompt.items.filter((i) => prompt.ids?.[i]).map((i) => ({ id: prompt.ids![i], type: kind, source: sourceForKind(kind) })),
           space.id,
           "ranked"
         );
@@ -94,11 +95,11 @@ export function BlindRankRound({ session: initialSession, roundNumber }: { sessi
   async function swapItem(item: string) {
     const ids = prompt.ids;
     const itemId = ids?.[item];
-    if (!ids || !itemId) return; // hardcoded-pack fallback item -- nothing to swap in
+    if (!ids || !itemId || !prompt.kind) return; // hardcoded-pack fallback item -- nothing to swap in
     setSwappingItem(item);
     try {
-      recordPlaySignal({ spaceId: space.id, itemId, itemType: "album", source: "musicbrainz", signalType: "unknown" });
-      const replacement = await swapBlindRankItem(space.id, Object.values(ids));
+      recordPlaySignal({ spaceId: space.id, itemId, itemType: prompt.kind, source: sourceForKind(prompt.kind), signalType: "unknown" });
+      const replacement = await swapBlindRankItem(space.id, prompt.kind, Object.values(ids));
       if (!replacement) {
         show("Couldn't find a replacement right now.", "error");
         return;

@@ -7,8 +7,8 @@ import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
 import { createGameSession, submitGameAnswer, updateGameSessionPrompt, type GameType } from "@/services/games-client";
 import { getGameSession } from "@/services/games-read-client";
-import { prefetchMusicPool } from "@/services/music-pool-client";
-import { pickChoicePrompt, CHOICE_POOL_SIZE, type ChoicePrompt } from "@/lib/choice-prompt";
+import { pickChoicePrompt, warmAllChoiceKinds, type ChoicePrompt } from "@/lib/choice-prompt";
+import { sourceForKind } from "@/lib/play-content-categories";
 import { recordPlaySignal, recordPlaySignalForItems } from "@/services/play-signals-client";
 import { usePollForResult } from "@/hooks/usePollForResult";
 import { playGame } from "@/lib/play-config";
@@ -56,7 +56,7 @@ export function ChoiceGameRound({
 
   // Warm the *next* round's pool while this one's being played.
   useEffect(() => {
-    prefetchMusicPool("artist", CHOICE_POOL_SIZE, space.id);
+    warmAllChoiceKinds(space.id);
   }, [space.id]);
 
   // While waiting on the partner, poll for the result so it appears
@@ -80,7 +80,10 @@ export function ChoiceGameRound({
       // Selection proves familiarity/engagement, not preference -- a
       // separate signal from whichever option "won".
       const chosen = prompt.items?.find((i) => i.title === value);
-      if (chosen) recordPlaySignal({ spaceId: space.id, itemId: chosen.id, itemType: "artist", source: "musicbrainz", signalType: "selected" });
+      if (chosen) {
+        const kind = prompt.kind ?? "artist";
+        recordPlaySignal({ spaceId: space.id, itemId: chosen.id, itemType: kind, source: sourceForKind(kind), signalType: "selected" });
+      }
       const fresh = await getGameSession(session.id);
       setSession(fresh as unknown as GameSessionRow);
       router.refresh();
@@ -101,8 +104,9 @@ export function ChoiceGameRound({
     if (!prompt.items?.length) return;
     setSwapping(true);
     try {
+      const kind = prompt.kind ?? "artist";
       recordPlaySignalForItems(
-        prompt.items.map((i) => ({ id: i.id, type: "artist", source: "musicbrainz" })),
+        prompt.items.map((i) => ({ id: i.id, type: kind, source: sourceForKind(kind) })),
         space.id,
         "unknown"
       );

@@ -4,7 +4,7 @@
  * components consume one consistent item type and never need to know
  * which provider or API produced it.
  */
-export type PlayItemType = "artist" | "album" | "track" | "movie" | "show" | "team" | "place" | "memory" | "favorite";
+export type PlayItemType = "artist" | "album" | "track" | "movie" | "show" | "tv" | "person" | "team" | "place" | "memory" | "favorite";
 
 export type PlayItem = {
   id: string;

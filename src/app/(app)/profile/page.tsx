@@ -140,6 +140,12 @@ export default async function ProfilePage({
         <AccountSwitcher />
       </div>
 
+      <div className="mb-4 px-4">
+        <Link href="/credits" className="text-[12.5px] font-medium text-[#a39d92] underline underline-offset-2">
+          Credits
+        </Link>
+      </div>
+
       <div className="no-scrollbar mb-4 flex gap-4 overflow-x-auto border-b border-[#eee9e2] px-4">
         {TABS.map(({ key, label, icon: Icon }) => {
           const active = tab === key;

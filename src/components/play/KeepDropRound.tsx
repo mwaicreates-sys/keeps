@@ -8,6 +8,7 @@ import { useToast } from "@/components/Toast";
 import { createGameSession, submitGameAnswer, updateGameSessionPrompt } from "@/services/games-client";
 import { getGameSession } from "@/services/games-read-client";
 import { warmAllKeepDropKinds, pickKeepDropPrompt, swapKeepDropItem, KEEP_COUNT, type KeepDropPrompt } from "@/lib/keep-drop-prompt";
+import { sourceForKind } from "@/lib/play-content-categories";
 import { recordPlaySignal, recordPlaySignalForItems } from "@/services/play-signals-client";
 import { usePollForResult } from "@/hooks/usePollForResult";
 import { playGame } from "@/lib/play-config";
@@ -68,17 +69,18 @@ export function KeepDropRound({ session: initialSession, roundNumber }: { sessio
         topic: session.topic,
       });
       if (prompt.ids) {
+        const kind = prompt.kind ?? "album";
         const withId = (title: string) => prompt.ids?.[title];
         // Finishing the round proves familiarity with everything shown,
         // not just what got kept -- see familiarity.ts: selection is
         // engagement evidence, not the whole signal.
         recordPlaySignalForItems(
-          prompt.items.filter(withId).map((i) => ({ id: withId(i)!, type: prompt.kind ?? "album", source: "musicbrainz" })),
+          prompt.items.filter(withId).map((i) => ({ id: withId(i)!, type: kind, source: sourceForKind(kind) })),
           space.id,
           "seen"
         );
         recordPlaySignalForItems(
-          kept.filter(withId).map((i) => ({ id: withId(i)!, type: prompt.kind ?? "album", source: "musicbrainz" })),
+          kept.filter(withId).map((i) => ({ id: withId(i)!, type: kind, source: sourceForKind(kind) })),
           space.id,
           "kept"
         );
@@ -102,7 +104,7 @@ export function KeepDropRound({ session: initialSession, roundNumber }: { sessio
     if (!ids || !itemId || !prompt.kind) return; // hardcoded-pack fallback item -- nothing to swap in
     setSwappingItem(item);
     try {
-      recordPlaySignal({ spaceId: space.id, itemId, itemType: prompt.kind, source: "musicbrainz", signalType: "unknown" });
+      recordPlaySignal({ spaceId: space.id, itemId, itemType: prompt.kind, source: sourceForKind(prompt.kind), signalType: "unknown" });
       const replacement = await swapKeepDropItem(space.id, prompt.kind, Object.values(ids));
       if (!replacement) {
         show("Couldn't find a replacement right now.", "error");

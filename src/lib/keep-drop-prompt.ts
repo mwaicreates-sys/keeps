@@ -1,8 +1,6 @@
-import { fetchMusicPoolPrimed, prefetchMusicPool, fetchSwapItem } from "@/services/music-pool-client";
-import { MUSIC_CATEGORY } from "@/lib/play-music-categories";
+import { fetchContentPoolPrimed, prefetchContentPool, fetchSwapContentItem } from "@/services/content-pool-client";
+import { CONTENT_CATEGORY, type ContentKind } from "@/lib/play-content-categories";
 import { KEEP3_DROP2_PACK, randomFrom } from "@/lib/game-prompts";
-
-export type MusicKind = "artist" | "album" | "track";
 
 export type KeepDropPrompt = {
   items: string[];
@@ -15,9 +13,10 @@ export type KeepDropPrompt = {
    * `images`. Lets the "Don't know this" swap exclude the right item
    * and record a familiarity signal against its real id. */
   ids?: Record<string, string>;
-  /** Which music kind this round used -- needed so a swap knows what
-   * to request a replacement of. */
-  kind?: MusicKind;
+  /** Which content kind this round used -- needed so a swap knows what
+   * pool to request a replacement from, and so signals get recorded
+   * against the right item type. */
+  kind?: ContentKind;
 };
 
 export const KEEP_COUNT = 3;
@@ -28,16 +27,26 @@ export const KEEP_DROP_ROUND_SIZE = 5;
  * required) ranking hands back. Exported so prefetch call sites warm
  * the exact same pool key this module consumes. */
 export const KEEP_DROP_FETCH_SIZE = 8;
-export const MUSIC_KINDS: readonly MusicKind[] = ["artist", "album", "track"];
+export const ALL_KINDS: readonly ContentKind[] = ["artist", "album", "track", "movie", "tv", "person"];
+
+const TOPIC_BY_KIND: Record<ContentKind, string> = {
+  artist: "Keep 3 artists",
+  album: "Keep 3 albums",
+  track: "Keep 3 songs",
+  movie: "Keep 3 movies",
+  tv: "Keep 3 shows",
+  person: "Keep 3 actors",
+};
 
 /** Shared by the history view (starting the first round) and the round
  * view (starting the next one), so both pick content identically. */
 export async function pickKeepDropPrompt(spaceId: string): Promise<{ prompt: KeepDropPrompt; topic: string }> {
   // Dynamic provider content is primary now -- every round tries a real
-  // 5-item set first (kind picked at random for variety), dropping to
-  // the hardcoded pack only when the pool comes up short.
-  const kind = MUSIC_KINDS[Math.floor(Math.random() * MUSIC_KINDS.length)];
-  const pool = await fetchMusicPoolPrimed(kind, KEEP_DROP_FETCH_SIZE, spaceId);
+  // 5-item set first (kind picked at random for variety, across both
+  // music and movies/TV), dropping to the hardcoded pack only when the
+  // pool comes up short.
+  const kind = ALL_KINDS[Math.floor(Math.random() * ALL_KINDS.length)];
+  const pool = await fetchContentPoolPrimed(kind, KEEP_DROP_FETCH_SIZE, spaceId);
   const withImages = pool.items.filter((i) => i.imageUrl).slice(0, KEEP_DROP_ROUND_SIZE);
 
   if (withImages.length === KEEP_DROP_ROUND_SIZE) {
@@ -45,22 +54,22 @@ export async function pickKeepDropPrompt(spaceId: string): Promise<{ prompt: Kee
     return {
       prompt: {
         items,
-        category: MUSIC_CATEGORY[kind],
+        category: CONTENT_CATEGORY[kind],
         images: Object.fromEntries(withImages.map((i) => [i.title, i.imageUrl])),
         ids: Object.fromEntries(withImages.map((i) => [i.title, i.id])),
         kind,
       },
-      topic: `Keep 3 ${kind === "artist" ? "artists" : kind === "album" ? "albums" : "songs"}`,
+      topic: TOPIC_BY_KIND[kind],
     };
   }
   const p = randomFrom(KEEP3_DROP2_PACK);
   return { prompt: { items: p.items, category: p.category }, topic: p.topic };
 }
 
-/** Fire off a prefetch for every music kind so whichever one `pickKeepDropPrompt`
+/** Fire off a prefetch for every kind so whichever one `pickKeepDropPrompt`
  * randomly picks next is already warm. */
 export function warmAllKeepDropKinds(spaceId: string) {
-  for (const k of MUSIC_KINDS) prefetchMusicPool(k, KEEP_DROP_FETCH_SIZE, spaceId);
+  for (const k of ALL_KINDS) prefetchContentPool(k, KEEP_DROP_FETCH_SIZE, spaceId);
 }
 
 /** Fetch a single replacement item of the round's own kind, excluding
@@ -68,9 +77,9 @@ export function warmAllKeepDropKinds(spaceId: string) {
  * out one card without regenerating the whole round. */
 export async function swapKeepDropItem(
   spaceId: string,
-  kind: MusicKind,
+  kind: ContentKind,
   currentIds: string[]
 ): Promise<{ title: string; id: string; imageUrl: string | null } | null> {
-  const replacement = await fetchSwapItem(kind, spaceId, currentIds);
+  const replacement = await fetchSwapContentItem(kind, spaceId, currentIds);
   return replacement ? { title: replacement.title, id: replacement.id, imageUrl: replacement.imageUrl } : null;
 }

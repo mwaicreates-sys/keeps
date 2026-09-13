@@ -38,7 +38,9 @@ export async function getKeepsMusicItems(
         type: "artist",
         title: artist,
         imageUrl: row.post_song_metadata.artwork_url,
-        source: "keeps",
+        source: "keeps_music",
+        discoverySource: "keeps_music",
+        imageSource: row.post_song_metadata.artwork_url ? "keeps" : null,
       });
       if (items.length >= count) break;
     }
@@ -58,7 +60,9 @@ export async function getKeepsMusicItems(
         title: album,
         subtitle: row.post_song_metadata.artist,
         imageUrl: row.post_song_metadata.artwork_url,
-        source: "keeps",
+        source: "keeps_music",
+        discoverySource: "keeps_music",
+        imageSource: row.post_song_metadata.artwork_url ? "keeps" : null,
       });
       if (items.length >= count) break;
     }
@@ -71,6 +75,8 @@ export async function getKeepsMusicItems(
     title: row.post_song_metadata.title,
     subtitle: row.post_song_metadata.artist,
     imageUrl: row.post_song_metadata.artwork_url,
-    source: "keeps",
+    source: "keeps_music",
+    discoverySource: "keeps_music",
+    imageSource: row.post_song_metadata.artwork_url ? "keeps" : null,
   }));
 }

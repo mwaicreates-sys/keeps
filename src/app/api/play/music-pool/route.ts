@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { getArtistPlayItems, getAlbumPlayItems, getTrackPlayItems } from "@/services/play-providers/musicbrainz";
+import { getArtistPlayItems, getAlbumPlayItems, getTrackPlayItems, type MusicFetchResult } from "@/services/play-providers/musicbrainz";
 import { getKeepsMusicItems } from "@/services/play-providers/keeps-music";
 import { MUSIC_CATEGORY } from "@/lib/play-music-categories";
 import type { PlayItem, PlayPool } from "@/services/play-providers/types";
@@ -28,11 +28,18 @@ async function getRecentlyUsedIds(spaceId: string, category: string): Promise<Se
   return ids;
 }
 
-async function fetchByKind(kind: Kind, count: number, exclude: Set<string>): Promise<PlayItem[]> {
+async function fetchByKind(kind: Kind, count: number, exclude: Set<string>): Promise<MusicFetchResult> {
   if (kind === "artist") return getArtistPlayItems(count, exclude);
   if (kind === "album") return getAlbumPlayItems(count, exclude);
   return getTrackPlayItems(count, exclude);
 }
+
+export type MusicPoolResponse = PlayPool & {
+  /** Surfaced for the diagnostics route / manual inspection -- never
+   * hidden behind a plain "it worked" response. */
+  listenBrainzFailed: boolean;
+  musicBrainzFailed: boolean;
+};
 
 export async function GET(req: NextRequest) {
   const params = req.nextUrl.searchParams;
@@ -41,23 +48,19 @@ export async function GET(req: NextRequest) {
   const spaceId = params.get("spaceId");
 
   if (!kind || !["artist", "album", "track"].includes(kind) || !spaceId) {
-    return NextResponse.json({ items: [], provider: "none" } satisfies PlayPool, { status: 400 });
+    return NextResponse.json(
+      { items: [], provider: "none", listenBrainzFailed: false, musicBrainzFailed: false } satisfies MusicPoolResponse,
+      { status: 400 }
+    );
   }
 
   const exclude = await getRecentlyUsedIds(spaceId, MUSIC_CATEGORY[kind]).catch(() => new Set<string>());
+  const { items: liveItems, listenBrainzFailed, musicBrainzFailed } = await fetchByKind(kind, count, exclude);
 
-  let items: PlayItem[] = [];
-  let provider = "musicbrainz";
-
-  try {
-    items = await fetchByKind(kind, count, exclude);
-  } catch {
-    // MusicBrainz unavailable or rate-limited -- fall through to Keeps' own content below.
-    items = [];
-  }
+  const items: PlayItem[] = [...liveItems];
+  const satisfiedByLiveProviders = items.length >= count;
 
   if (items.length < count) {
-    provider = items.length === 0 ? "keeps" : "mixed";
     const have = new Set(items.map((i) => i.title.toLowerCase()));
     const topUp = await getKeepsMusicItems(spaceId, kind, count - items.length + have.size).catch(() => []);
     for (const item of topUp) {
@@ -68,5 +71,12 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ items, provider } satisfies PlayPool);
+  // Honest three-way label: "musicbrainz" when ListenBrainz/MusicBrainz
+  // alone had enough, "keeps_music" once real personal content had to
+  // fill the gap, "keeps_picks" when even that came up short and the
+  // caller (e.g. ChoiceGame) needs to fall back to its own hardcoded
+  // pack.
+  const provider = satisfiedByLiveProviders ? "musicbrainz" : items.length >= count ? "keeps_music" : "keeps_picks";
+
+  return NextResponse.json({ items, provider, listenBrainzFailed, musicBrainzFailed } satisfies MusicPoolResponse);
 }

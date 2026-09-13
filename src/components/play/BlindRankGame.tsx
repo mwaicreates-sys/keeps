@@ -7,14 +7,25 @@ import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
 import { createGameSession, submitGameAnswer } from "@/services/games-client";
 import { getGameSession } from "@/services/games-read-client";
+import { fetchMusicPool } from "@/services/music-pool-client";
+import { MUSIC_CATEGORY } from "@/lib/play-music-categories";
 import { BLIND_RANK_PACK, randomFrom } from "@/lib/game-prompts";
 import { getErrorMessage, timeAgo } from "@/lib/utils";
 import { GameHeader } from "@/components/play/GameHeader";
 import { EmptyState } from "@/components/EmptyState";
 import { sessionStatus, type GameSessionRow } from "@/lib/game-types";
 
-type Prompt = { items: string[]; category: string };
+type Prompt = {
+  items: string[];
+  category: string;
+  /** Only present for a real, provider-backed set (e.g. 5 albums) --
+   * looked up by item title so the existing string-keyed ranking/result
+   * logic below never has to change shape. */
+  images?: Record<string, string | null>;
+};
 type Result = { matches: number; [userId: string]: unknown };
+
+const ROUND_SIZE = 5;
 
 export function BlindRankGame({ sessions }: { sessions: GameSessionRow[] }) {
   const { userId, space, otherMember } = useSession();
@@ -28,15 +39,34 @@ export function BlindRankGame({ sessions }: { sessions: GameSessionRow[] }) {
   async function startNew() {
     setStarting(true);
     try {
-      const p = randomFrom(BLIND_RANK_PACK);
+      let prompt: Prompt;
+      let topic: string;
+
+      const useMusic = Math.random() < 0.5;
+      const pool = useMusic ? await fetchMusicPool("album", ROUND_SIZE, space.id) : null;
+
+      if (pool && pool.items.length === ROUND_SIZE) {
+        const items = pool.items.map((i) => i.title);
+        prompt = {
+          items,
+          category: MUSIC_CATEGORY.album,
+          images: Object.fromEntries(pool.items.map((i) => [i.title, i.imageUrl])),
+        };
+        topic = "Rank these albums";
+      } else {
+        const p = randomFrom(BLIND_RANK_PACK);
+        prompt = { items: p.items, category: p.category };
+        topic = p.topic;
+      }
+
       const session = await createGameSession({
         spaceId: space.id,
         createdBy: userId,
         otherMemberId: otherMember?.id ?? null,
         gameType: "blind_rank",
-        topic: p.topic,
-        category: p.category,
-        prompt: { items: p.items, category: p.category },
+        topic,
+        category: prompt.category,
+        prompt,
       });
       setActive({ ...session, game_answers: [], game_results: null } as GameSessionRow);
       setOrder([]);
@@ -118,13 +148,15 @@ export function BlindRankGame({ sessions }: { sessions: GameSessionRow[] }) {
                 const mine = (result[userId] as Record<string, number>)[item];
                 const theirs = otherMember ? (result[otherMember.id] as Record<string, number>)[item] : undefined;
                 const same = mine === theirs;
+                const image = prompt.images?.[item];
                 return (
                   <div
                     key={item}
-                    className={`flex items-center justify-between rounded-xl px-3.5 py-2.5 ${same ? "bg-[#e6f2e9]" : "bg-[#f7f5f1]"}`}
+                    className={`flex items-center gap-3 rounded-xl px-3 py-2.5 ${same ? "bg-[#e6f2e9]" : "bg-[#f7f5f1]"}`}
                   >
-                    <span className="text-[13.5px] font-medium text-[#3a362f]">{item}</span>
-                    <span className="text-[12px] text-[#7c766c]">
+                    {image !== undefined && <ItemThumb imageUrl={image} />}
+                    <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium text-[#3a362f]">{item}</span>
+                    <span className="shrink-0 text-[12px] text-[#7c766c]">
                       You #{mine}
                       {otherMember && ` · ${otherMember.display_name} #${theirs}`}
                     </span>
@@ -146,21 +178,23 @@ export function BlindRankGame({ sessions }: { sessions: GameSessionRow[] }) {
             <div className="space-y-2">
               {prompt.items.map((item) => {
                 const rank = order.indexOf(item);
+                const image = prompt.images?.[item];
                 return (
                   <button
                     key={item}
                     type="button"
                     onClick={() => tapItem(item)}
-                    className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left text-[14.5px] font-medium transition ${
+                    className={`flex w-full items-center gap-3 rounded-2xl px-3.5 py-2.5 text-left text-[14.5px] font-medium transition ${
                       rank >= 0 ? "bg-[#3a362f] text-white" : "bg-[#f7f5f1] text-[#3a362f]"
                     }`}
                   >
+                    {image !== undefined && <ItemThumb imageUrl={image} />}
+                    <span className="min-w-0 flex-1 truncate">{item}</span>
                     {rank >= 0 && (
                       <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-white/20 text-[12px] font-bold">
                         {rank + 1}
                       </span>
                     )}
-                    {item}
                   </button>
                 );
               })}
@@ -214,6 +248,16 @@ export function BlindRankGame({ sessions }: { sessions: GameSessionRow[] }) {
         )}
       </div>
     </div>
+  );
+}
+
+function ItemThumb({ imageUrl }: { imageUrl: string | null }) {
+  if (!imageUrl) {
+    return <div className="h-9 w-9 shrink-0 rounded-lg bg-black/10" />;
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={imageUrl} alt="" className="h-9 w-9 shrink-0 rounded-lg object-cover" />
   );
 }
 

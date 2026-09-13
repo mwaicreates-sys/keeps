@@ -34,10 +34,11 @@ async function pickPrompt(
   gameType: "this_or_that" | "guess_mine",
   spaceId: string
 ): Promise<Prompt> {
-  // This or That gets a real, image-first music matchup part of the
-  // time -- mixed in with the existing hardcoded categories rather than
-  // replacing them, so the game still covers movies/football/food/etc.
-  if (gameType === "this_or_that" && Math.random() < 0.5) {
+  // This or That / Guess Mine both get a real, image-first music
+  // matchup part of the time -- mixed in with the existing hardcoded
+  // categories rather than replacing them, so the game still covers
+  // movies/football/food/etc.
+  if (Math.random() < 0.5) {
     const pool = await fetchMusicPool("artist", 2, spaceId);
     if (pool.items.length === 2) {
       const [a, b] = pool.items;

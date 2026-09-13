@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PostHeader } from "@/components/home/PostHeader";
 import { PhotoCollage } from "@/components/home/PhotoCollage";
 import { ActivityPost } from "@/components/home/ActivityPost";
@@ -12,18 +12,32 @@ import { Music2, Play } from "lucide-react";
 import type { FeedPost as FeedPostData } from "@/lib/domain-types";
 import type { Tables } from "@/lib/types";
 
-export function FeedPost({ post }: { post: FeedPostData }) {
+/**
+ * `initialShowComments` is used by the memory detail page (a permalink
+ * view of one post), which opens straight into its replies instead of
+ * making the visitor tap the reply icon first, the way a fresh feed
+ * card always starts collapsed.
+ */
+export function FeedPost({ post, initialShowComments = false }: { post: FeedPostData; initialShowComments?: boolean }) {
   const { userId, space, otherMember } = useSession();
-  const [showComments, setShowComments] = useState(false);
+  const [showComments, setShowComments] = useState(initialShowComments);
   const [comments, setComments] = useState<(Tables<"comments"> & { author: Tables<"profiles"> })[] | null>(null);
   const [draft, setDraft] = useState("");
 
+  async function fetchComments() {
+    if (comments) return;
+    const res = await fetch(`/api/comments?postId=${post.id}`).then((r) => r.json()).catch(() => []);
+    setComments(res);
+  }
+
+  useEffect(() => {
+    if (initialShowComments) fetchComments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function loadComments() {
     setShowComments((s) => !s);
-    if (!comments) {
-      const res = await fetch(`/api/comments?postId=${post.id}`).then((r) => r.json()).catch(() => []);
-      setComments(res);
-    }
+    await fetchComments();
   }
 
   async function submitComment(e: React.FormEvent) {

@@ -59,6 +59,16 @@ export async function getFeed(spaceId: string, userId: string, limit = 20): Prom
   return hydratePosts(data ?? [], userId);
 }
 
+/** A single post, fully hydrated -- the memory detail page's permalink view. */
+export async function getPost(postId: string, userId: string): Promise<FeedPost | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("posts").select(POST_SELECT).eq("id", postId).maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const [hydrated] = await hydratePosts([data], userId);
+  return hydrated ?? null;
+}
+
 export type MemoryFilters = {
   year?: number;
   category?: string;

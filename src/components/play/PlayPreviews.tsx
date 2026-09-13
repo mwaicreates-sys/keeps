@@ -1,20 +1,31 @@
-import { Crown } from "lucide-react";
+import { Crown, Heart, Star } from "lucide-react";
 
-/** Two tilted, overlapping mini-cards — the card must read as "two competing choices". */
+/**
+ * Two tilted, overlapping choice cards with a small "OR" badge between
+ * them — reads as "two competing choices" without committing to any one
+ * choice type, since real choices may later be text or images instead of
+ * these placeholder icons.
+ */
 export function ThisOrThatPreview() {
   return (
     <div className="relative h-[72px] w-[92px]">
       <span
-        className="absolute left-0 top-2 grid h-14 w-14 rotate-[-8deg] place-items-center rounded-2xl border-2 border-white bg-white text-2xl shadow-md"
+        className="absolute left-0 top-2 grid h-14 w-14 rotate-[-8deg] place-items-center rounded-2xl border-2 border-white bg-white shadow-md"
         aria-hidden
       >
-        ⚽
+        <Heart size={20} className="text-[#c2495f]" fill="currentColor" />
       </span>
       <span
-        className="absolute right-0 top-0 grid h-14 w-14 rotate-[7deg] place-items-center rounded-2xl border-2 border-white bg-white text-2xl shadow-md"
+        className="absolute right-0 top-0 grid h-14 w-14 rotate-[7deg] place-items-center rounded-2xl border-2 border-white bg-white shadow-md"
         aria-hidden
       >
-        🎵
+        <Star size={20} className="text-[#c99a2e]" fill="currentColor" />
+      </span>
+      <span
+        className="absolute left-1/2 top-1/2 grid h-6 w-6 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full bg-[#3a362f] text-[9px] font-bold text-white shadow-sm"
+        aria-hidden
+      >
+        OR
       </span>
     </div>
   );

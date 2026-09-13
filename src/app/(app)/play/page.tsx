@@ -11,7 +11,7 @@ import {
   GuessMinePreview,
   KeepDropPreview,
 } from "@/components/play/PlayPreviews";
-import { Swords, ListOrdered, EyeOff, Trophy, HelpCircle, SplitSquareVertical } from "lucide-react";
+import { Heart, ListOrdered, EyeOff, Trophy, HelpCircle, SplitSquareVertical } from "lucide-react";
 
 export default async function PlayHubPage() {
   const ctx = await getSessionContext();
@@ -33,7 +33,7 @@ export default async function PlayHubPage() {
     <div className="w-full min-w-0 pb-4 md:mx-auto md:max-w-2xl md:py-4">
       <HomeHeader unreadCount={unreadCount ?? 0} />
 
-      <PageIntro title="Play" subtitle="Little games that say more than a chat ever could." />
+      <PageIntro title="Games" subtitle="Little games for the two of you." />
 
       <div className="grid grid-cols-2 gap-3 px-4">
         <PlayGameCard
@@ -41,7 +41,7 @@ export default async function PlayHubPage() {
           bg="#fbe9ec"
           iconBg="#f7d3d9"
           iconColor="#c2495f"
-          icon={Swords}
+          icon={Heart}
           title="This or That"
           subtitle="Pick a side. See if you match."
           preview={<ThisOrThatPreview />}
@@ -53,7 +53,7 @@ export default async function PlayHubPage() {
           iconColor="#5457c7"
           icon={ListOrdered}
           title="My Top 5"
-          subtitle="Rank it. Compare it."
+          subtitle="Rank five. Compare yours."
           preview={<Top5Preview />}
         />
         <PlayGameCard
@@ -63,7 +63,7 @@ export default async function PlayHubPage() {
           iconColor="#2f8f52"
           icon={EyeOff}
           title="Blind Rank"
-          subtitle="One at a time, no take-backs."
+          subtitle="Rank them before seeing what comes next."
           preview={<BlindRankPreview />}
         />
         <PlayGameCard
@@ -83,7 +83,7 @@ export default async function PlayHubPage() {
           iconColor="#2f6fa3"
           icon={HelpCircle}
           title="Guess Mine"
-          subtitle="How well do you know them?"
+          subtitle="Guess what the other person picked."
           preview={<GuessMinePreview />}
         />
         <PlayGameCard
@@ -93,7 +93,7 @@ export default async function PlayHubPage() {
           iconColor="#c23a3a"
           icon={SplitSquareVertical}
           title="Keep 3, Drop 2"
-          subtitle="Hard choices only."
+          subtitle="Five choices. Only three survive."
           preview={<KeepDropPreview />}
         />
       </div>

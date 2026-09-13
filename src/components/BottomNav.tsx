@@ -11,7 +11,7 @@ const items: { href: string; label: string; icon: typeof Home; primary?: boolean
   { href: "/home", label: "Home", icon: Home },
   { href: "/memories", label: "Memories", icon: Archive },
   { href: "/drop", label: "Drop", icon: Plus, primary: true },
-  { href: "/play", label: "Play", icon: Gamepad2 },
+  { href: "/play", label: "Games", icon: Gamepad2 },
 ];
 
 export function BottomNav() {

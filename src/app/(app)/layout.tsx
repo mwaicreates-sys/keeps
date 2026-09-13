@@ -20,7 +20,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <DesktopSidebar />
         <div className="flex min-h-[100vh] min-w-0 flex-1 flex-col">
           <HideOnHome>
-            <TopBar userId={ctx.userId} />
+            <TopBar unreadCount={ctx.unreadCount} />
           </HideOnHome>
           <div className="hidden items-center justify-end gap-1 border-b border-line px-6 py-3 md:flex">
             <Link href="/search" aria-label="Search" className="rounded-full p-2 text-ink hover:bg-accent-soft">

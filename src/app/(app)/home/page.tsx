@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { getSessionContext } from "@/services/session";
-import { createClient } from "@/lib/supabase/server";
 import { getFeed } from "@/services/posts-server";
 import { getActiveStories } from "@/services/stories-server";
 import { getResurfaced } from "@/services/resurfacing";
@@ -17,13 +16,7 @@ export default async function HomePage() {
   const ctx = await getSessionContext();
   if (!ctx) return null;
 
-  const supabase = await createClient();
-  const [{ count: unreadCount }, stories, resurfaced, posts] = await Promise.all([
-    supabase
-      .from("notifications")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", ctx.userId)
-      .is("read_at", null),
+  const [stories, resurfaced, posts] = await Promise.all([
     getActiveStories(ctx.space.id, ctx.userId),
     getResurfaced(ctx.space.id),
     getFeed(ctx.space.id, ctx.userId),
@@ -31,7 +24,7 @@ export default async function HomePage() {
 
   return (
     <div className="mx-auto w-full max-w-xl pb-4 md:max-w-2xl md:py-4">
-      <HomeHeader unreadCount={unreadCount ?? 0} />
+      <HomeHeader unreadCount={ctx.unreadCount} />
       <StoryRail stories={stories} currentUserId={ctx.userId} />
 
       {resurfaced.length > 0 && (

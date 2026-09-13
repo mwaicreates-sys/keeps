@@ -13,7 +13,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { getSessionContext } from "@/services/session";
-import { createClient } from "@/lib/supabase/server";
 import { searchSpace, gameHref, type SearchResultType } from "@/services/search-server";
 import { getFeed } from "@/services/posts-server";
 import { EmptyState } from "@/components/EmptyState";
@@ -126,13 +125,6 @@ export default async function SearchPage({
   const ctx = await getSessionContext();
   if (!ctx) return null;
 
-  const supabase = await createClient();
-  const { count: unreadCount } = await supabase
-    .from("notifications")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", ctx.userId)
-    .is("read_at", null);
-
   const [results, feedSample] = await Promise.all([
     q ? searchSpace(ctx.space.id, q, type) : Promise.resolve(null),
     q ? Promise.resolve([]) : getFeed(ctx.space.id, ctx.userId, 15),
@@ -145,7 +137,7 @@ export default async function SearchPage({
 
   return (
     <div className="mx-auto w-full max-w-xl pb-4 md:max-w-2xl md:py-4">
-      <HomeHeader unreadCount={unreadCount ?? 0} />
+      <HomeHeader unreadCount={ctx.unreadCount} />
 
       <div className="px-4 pb-3 pt-1">
         {!q && (

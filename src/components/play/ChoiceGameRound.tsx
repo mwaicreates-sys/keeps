@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { HelpCircle } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
-import { createGameSession, submitGameAnswer, updateGameSessionPrompt, DailyCapReachedError, type GameType } from "@/services/games-client";
+import { submitGameAnswer, updateGameSessionPrompt, type GameType } from "@/services/games-client";
 import { getGameSession } from "@/services/games-read-client";
 import { pickChoicePrompt, warmAllChoiceKinds, type ChoicePrompt } from "@/lib/choice-prompt";
 import { sourceForKind } from "@/lib/play-content-categories";
@@ -125,31 +125,14 @@ export function ChoiceGameRound({
     }
   }
 
-  async function nextRound() {
+  /** This screen only ever renders a leftover pre-daily-run session
+   * reached via an old link/history entry -- new gameplay lives at the
+   * base route's continuous daily run instead (see ChoiceRunScreen).
+   * "Next round" from here just returns there rather than creating
+   * another one-off game_sessions row. */
+  function nextRound() {
     setStartingNext(true);
-    try {
-      const next = await pickChoicePrompt(gameType, space.id);
-      const created = await createGameSession({
-        spaceId: space.id,
-        createdBy: userId,
-        otherMemberId: otherMember?.id ?? null,
-        gameType,
-        topic: next.topic,
-        category: next.category,
-        prompt: next,
-      });
-      router.push(`/play/${slug}/${created.id}`);
-    } catch (err) {
-      if (err instanceof DailyCapReachedError) {
-        // The daily cap was hit exactly on this attempt -- the base
-        // route now redirects/gates on the same check, so send the
-        // player there instead of showing a raw error toast.
-        router.push(`/play/${slug}`);
-        return;
-      }
-      show(getErrorMessage(err, "Couldn't start the next round."), "error");
-      setStartingNext(false);
-    }
+    router.push(`/play/${slug}`);
   }
 
   return (

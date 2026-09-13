@@ -1,0 +1,231 @@
+"use client";
+
+import { useState } from "react";
+import { HelpCircle } from "lucide-react";
+import { useSession } from "@/components/SessionProvider";
+import { useToast } from "@/components/Toast";
+import { submitRunAnswer } from "@/services/game-runs-client";
+import { sourceForKind } from "@/lib/play-content-categories";
+import { recordPlaySignal } from "@/services/play-signals-client";
+import { playGame } from "@/lib/play-config";
+import { RoundHeader } from "@/components/play/RoundHeader";
+import { RoundTagline } from "@/components/play/RoundTagline";
+import { RunWaitingForPartner } from "@/components/play/RunWaitingForPartner";
+import { getErrorMessage } from "@/lib/utils";
+import type { ChoicePrompt } from "@/lib/choice-prompt";
+import type { RunResult } from "@/lib/game-run-result";
+import type { RunStartResponse } from "@/services/game-runs-client";
+
+/**
+ * The daily continuous-run screen for This or That / Guess Mine --
+ * replaces the old one-session-per-question, wait-for-partner-between-
+ * every-tap model. All 5 questions are already sitting in `run.questions`
+ * (generated once, together, when either player first opened the game
+ * today) -- there is no provider round trip between taps, only a save.
+ *
+ * Tap a card -> selected state right away -> answer saves in the
+ * background -> a brief transition -> next question. No "Lock it in",
+ * no "Next question." After question 5, if the partner has already
+ * finished today's run too, the comparison shows immediately; otherwise
+ * this player is sent back to Play with "results when they finish" --
+ * never blocked waiting mid-run.
+ */
+export function ChoiceRunScreen({ gameType, slug, initial }: { gameType: "this_or_that" | "guess_mine"; slug: string; initial: RunStartResponse }) {
+  const { space } = useSession();
+  const { show } = useToast();
+  const game = playGame(slug);
+
+  const questions = initial.run.questions as unknown as ChoicePrompt[];
+  const myPriorAnswers = ((initial.mine?.answers as { choice: string }[] | undefined) ?? []).map((a) => a.choice);
+
+  const [answers, setAnswers] = useState<string[]>(myPriorAnswers);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [advancing, setAdvancing] = useState(false);
+  const [completed, setCompleted] = useState(!!initial.mine?.completed_at);
+  const [result, setResult] = useState<RunResult | null>(initial.result);
+
+  const currentIndex = answers.length;
+  const question = questions[currentIndex];
+
+  async function choose(value: string) {
+    if (selected || advancing) return;
+    setSelected(value);
+    const chosen = question.items?.find((i) => i.title === value);
+    if (chosen) {
+      const kind = question.kind ?? "artist";
+      recordPlaySignal({ spaceId: space.id, itemId: chosen.id, itemType: kind, source: sourceForKind(kind), signalType: "selected" });
+    }
+    setAdvancing(true);
+    try {
+      const res = await submitRunAnswer(initial.run.id, { choice: value });
+      // Brief, deliberate pause so the selection ring/feedback is
+      // visible before the screen moves on -- per the "~250-450ms
+      // transition" rule, not an artificial network delay.
+      await new Promise((r) => setTimeout(r, 320));
+      setAnswers((prev) => [...prev, value]);
+      setSelected(null);
+      setAdvancing(false);
+      if (res.completed) {
+        setCompleted(true);
+        if (res.result) setResult(res.result);
+      }
+    } catch (err) {
+      show(getErrorMessage(err, "Couldn't save your answer."), "error");
+      setSelected(null);
+      setAdvancing(false);
+    }
+  }
+
+  if (completed) {
+    if (result) {
+      return (
+        <div className="mx-auto max-w-xl px-4 pb-6">
+          <RoundHeader
+            slug={slug}
+            title={game.label}
+            category={initial.run.category ?? "Mixed"}
+            icon={game.icon}
+            pillBg={game.bg}
+            pillColor={game.iconColor}
+            roundNumber={5}
+            roundTotal={5}
+            question="Today's results"
+          />
+          {result.kind === "choice" && (
+            <div className="space-y-3">
+              <div className="rounded-2xl bg-[#e6f2e9] px-4 py-3 text-center">
+                <p className="text-[15px] font-semibold text-[#2f8f52]">
+                  {result.matchedCount} of {result.total} matched
+                </p>
+              </div>
+              <div className="space-y-2">
+                {result.perQuestion.map((pq) => {
+                  const q = questions[pq.index];
+                  return (
+                    <div key={pq.index} className={`rounded-xl p-2.5 ${pq.matched ? "bg-[#e6f2e9]" : "bg-[#f7f5f1]"}`}>
+                      <div className="grid grid-cols-2 gap-2">
+                        <ResultOption label={q.optionA} image={q.imageA} picked={pq.mine === q.optionA} pickedBy={pq.theirs === q.optionA ? "them" : undefined} />
+                        <ResultOption label={q.optionB} image={q.imageB} picked={pq.mine === q.optionB} pickedBy={pq.theirs === q.optionB ? "them" : undefined} />
+                      </div>
+                      <p className="mt-1.5 text-center text-[11.5px] font-semibold text-[#7c766c]">
+                        {pq.matched ? "Matched" : "Different"}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          {game.tagline && game.taglineIcon && <RoundTagline text={game.tagline} icon={game.taglineIcon} />}
+        </div>
+      );
+    }
+    return (
+      <RunWaitingForPartner
+        icon={game.icon}
+        bg={game.bg}
+        iconColor={game.iconColor}
+        headline="That's today's 5"
+        partnerName={initial.partner?.display_name ?? null}
+      />
+    );
+  }
+
+  if (!question) return null; // guard -- shouldn't happen once completed is handled above
+
+  const isVisual = !!(question.imageA || question.imageB);
+
+  return (
+    <div className="mx-auto max-w-xl px-4 pb-6">
+      <RoundHeader
+        slug={slug}
+        title={game.label}
+        category={question.category}
+        icon={game.icon}
+        pillBg={game.bg}
+        pillColor={game.iconColor}
+        roundNumber={currentIndex + 1}
+        roundTotal={questions.length}
+        question={isVisual ? (gameType === "guess_mine" ? "Which one would they pick?" : "Which one are you keeping?") : question.topic}
+      />
+
+      {isVisual ? (
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { label: question.optionA, image: question.imageA },
+            { label: question.optionB, image: question.imageB },
+          ].map(({ label, image }) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => choose(label)}
+              disabled={!!selected}
+              className={`text-center transition ${selected === label ? "scale-[0.98]" : selected ? "opacity-60" : ""}`}
+            >
+              <div
+                className={`relative aspect-square w-full overflow-hidden rounded-[22px] bg-[#f2efe9] ${selected === label ? "ring-[3px] ring-[#3a362f]" : ""}`}
+              >
+                {image ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={image} alt="" loading="eager" fetchPriority="high" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="grid h-full w-full place-items-center text-[#a39d92]">
+                    <HelpCircle size={28} />
+                  </div>
+                )}
+                <span
+                  className={`absolute right-2.5 top-2.5 grid h-6 w-6 place-items-center rounded-full border-2 border-white ${
+                    selected === label ? "bg-[#3a362f]" : "bg-white/25"
+                  }`}
+                >
+                  {selected === label && <span className="h-2 w-2 rounded-full bg-white" />}
+                </span>
+              </div>
+              <p className="mt-2 truncate text-[14px] font-bold text-[#3a362f]">{label}</p>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {[question.optionA, question.optionB].map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => choose(opt)}
+              disabled={!!selected}
+              className={`flex w-full items-center justify-between rounded-2xl px-4 py-4 text-left text-[15.5px] font-semibold transition ${
+                selected === opt ? "scale-[0.99] bg-[#3a362f] text-white" : "bg-[#f7f5f1] text-[#3a362f]"
+              } ${selected && selected !== opt ? "opacity-60" : ""}`}
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {game.tagline && game.taglineIcon && <RoundTagline text={game.tagline} icon={game.taglineIcon} />}
+    </div>
+  );
+}
+
+function ResultOption({ label, image, picked, pickedBy }: { label: string; image?: string | null; picked: boolean; pickedBy?: "them" }) {
+  return (
+    <div className={`overflow-hidden rounded-xl ${picked ? "ring-2 ring-[#3a362f]" : ""}`}>
+      <div className="relative aspect-square w-full bg-[#f2efe9]">
+        {image ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={image} alt="" className="h-full w-full object-cover" />
+        ) : (
+          <div className="grid h-full w-full place-items-center text-[#a39d92]">
+            <HelpCircle size={22} />
+          </div>
+        )}
+      </div>
+      <p className="truncate bg-white px-1.5 py-1 text-center text-[11px] font-semibold text-[#3a362f]">
+        {label}
+        {picked && " · You"}
+        {pickedBy && " · Them"}
+      </p>
+    </div>
+  );
+}

@@ -4,10 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
-import { createGameSession, submitGameAnswer, DailyCapReachedError } from "@/services/games-client";
+import { submitGameAnswer } from "@/services/games-client";
 import { getGameSession } from "@/services/games-read-client";
 import { saveTop5List } from "@/services/top5-client";
-import { pickTop5Prompt, type Top5Prompt } from "@/lib/top5-prompt";
+import type { Top5Prompt } from "@/lib/top5-prompt";
 import { usePollForResult } from "@/hooks/usePollForResult";
 import { playGame } from "@/lib/play-config";
 import { RoundHeader } from "@/components/play/RoundHeader";
@@ -66,28 +66,12 @@ export function Top5Round({ session: initialSession, roundNumber }: { session: G
     }
   }
 
-  async function nextRound() {
+  /** This screen only ever renders a leftover pre-daily-run session --
+   * new gameplay lives at the base route's daily run instead (see
+   * Top5RunScreen). */
+  function nextRound() {
     setStartingNext(true);
-    try {
-      const next = await pickTop5Prompt();
-      const created = await createGameSession({
-        spaceId: space.id,
-        createdBy: userId,
-        otherMemberId: otherMember?.id ?? null,
-        gameType: "top5",
-        topic: next.topic,
-        category: next.category,
-        prompt: next,
-      });
-      router.push(`/play/top5/${created.id}`);
-    } catch (err) {
-      if (err instanceof DailyCapReachedError) {
-        router.push("/play/top5");
-        return;
-      }
-      show(getErrorMessage(err, "Couldn't start the next round."), "error");
-      setStartingNext(false);
-    }
+    router.push("/play/top5");
   }
 
   return (

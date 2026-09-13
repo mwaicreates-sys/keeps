@@ -3,7 +3,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { notify } from "@/services/notify-client";
 import type { Json } from "@/lib/types";
-import type { GameSessionRow } from "@/lib/game-types";
 
 export type GameType =
   | "this_or_that"
@@ -13,57 +12,17 @@ export type GameType =
   | "guess_mine"
   | "keep3_drop2";
 
-/** Thrown by createGameSession when the caller has already started
- * DAILY_PLAY_CAP sessions of this game type today -- lets callers show
- * a "Done for today" state instead of a generic error toast. The real
- * enforcement lives server-side in /api/play/session; this is just a
- * typed way for the client to recognize that specific rejection. */
-export class DailyCapReachedError extends Error {
-  limit: number;
-  constructor(limit: number) {
-    super("Done for today");
-    this.name = "DailyCapReachedError";
-    this.limit = limit;
-  }
-}
-
-/**
- * Creates a new game_sessions row via Keeps' own server route rather
- * than inserting directly from the browser -- /api/play/session is the
- * only place that ever counts today's plays and enforces the daily cap
- * before the row exists, so no client-side path (refresh, a new tab, a
- * new route, reopening the game) can create a 6th round today.
- */
-export async function createGameSession(input: {
-  spaceId: string;
-  createdBy: string;
-  otherMemberId: string | null;
-  gameType: GameType;
-  topic: string;
-  category?: string;
-  prompt: Record<string, unknown>;
-}): Promise<GameSessionRow> {
-  const start = performance.now();
-  const res = await fetch("/api/play/session", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      spaceId: input.spaceId,
-      otherMemberId: input.otherMemberId,
-      gameType: input.gameType,
-      topic: input.topic,
-      category: input.category,
-      prompt: input.prompt,
-    }),
-  });
-  const body = await res.json().catch(() => ({}));
-  if (res.status === 403 && body.error === "daily_cap_reached") {
-    throw new DailyCapReachedError(body.limit ?? 5);
-  }
-  if (!res.ok) throw new Error(body.error || "Couldn't start a new round.");
-  console.log("[perf] session_creation", { gameType: input.gameType, ms: Math.round(performance.now() - start) });
-  return body.session as GameSessionRow;
-}
+// Note: This or That/Guess Mine/Blind Rank/Keep 3 Drop 2/Top 5 no
+// longer create game_sessions rows for new gameplay -- they run on the
+// daily-run model instead (see game-runs-server.ts/game-runs-client.ts
+// and each game's ChoiceRunScreen/BlindRankRunScreen/etc.). The
+// game_sessions-based creation flow that used to live here
+// (createGameSession, plus its server-side daily-cap enforcement at
+// /api/play/session) has been removed as dead code now that nothing
+// calls it; old game_sessions rows themselves are untouched and still
+// render at /play/<slug>/[sessionId] and in /play/history. Match
+// Predictions never used createGameSession (it's fixture-based) and is
+// unaffected either way.
 
 /** Persists a swapped-in round ("Don't know this?") to the session row
  * itself, not just local state -- so a partner opening the same

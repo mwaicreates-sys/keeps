@@ -3,6 +3,8 @@ import { SlidersHorizontal, History as HistoryIcon } from "lucide-react";
 import { getSessionContext } from "@/services/session";
 import { createClient } from "@/lib/supabase/server";
 import { getTasteProfileServer } from "@/services/taste-profile-server";
+import { getCompletedRunGameTypesToday } from "@/services/game-runs-server";
+import { isRunGameType } from "@/lib/game-run-types";
 import { PlayGameCard } from "@/components/play/PlayGameCard";
 import { TuneNudgeBanner } from "@/components/play/TuneNudgeBanner";
 import { PlayHomePrefetch } from "@/components/play/PlayHomePrefetch";
@@ -33,6 +35,7 @@ export default async function PlayPage() {
     .maybeSingle();
 
   const { artists: tasteArtists } = await getTasteProfileServer(ctx.space.id, ctx.userId);
+  const completedToday = await getCompletedRunGameTypesToday(ctx.space.id, ctx.userId);
 
   return (
     <div className="mx-auto w-full max-w-xl pb-4 md:max-w-2xl md:py-4">
@@ -76,6 +79,7 @@ export default async function PlayPage() {
             icon={game.icon}
             title={game.label}
             subtitle={game.subtitle}
+            playedToday={isRunGameType(game.type) && completedToday.has(game.type)}
             preview={
               game.type === "this_or_that" ? (
                 <ThisOrThatPreview />

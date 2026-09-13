@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Check } from "lucide-react";
 
 /**
  * Normal document flow only for the primary zones — top row, text, preview
@@ -18,6 +18,7 @@ export function PlayGameCard({
   title,
   subtitle,
   preview,
+  playedToday,
 }: {
   href: string;
   bg: string;
@@ -27,6 +28,11 @@ export function PlayGameCard({
   title: string;
   subtitle: string;
   preview: React.ReactNode;
+  /** This player has already completed today's run of this game --
+   * shows a small "played today" checkmark instead of changing the tap
+   * target (opening it still shows results/waiting, never regenerates
+   * another run). */
+  playedToday?: boolean;
 }) {
   return (
     <Link
@@ -44,7 +50,14 @@ export function PlayGameCard({
       </div>
 
       <div className="mt-2 min-w-0 shrink-0">
-        <p className="text-[15px] font-bold leading-tight text-[#2c281f]">{title}</p>
+        <p className="flex items-center gap-1.5 text-[15px] font-bold leading-tight text-[#2c281f]">
+          {title}
+          {playedToday && (
+            <span className="inline-flex items-center gap-0.5 rounded-full bg-white/70 px-1.5 py-0.5 text-[9.5px] font-bold text-[#2f8f52]">
+              <Check size={10} strokeWidth={3} /> Played today
+            </span>
+          )}
+        </p>
         <p className="mt-0.5 text-[11.5px] leading-[1.3] text-[#5c574c]">{subtitle}</p>
       </div>
 

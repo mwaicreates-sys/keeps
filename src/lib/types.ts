@@ -293,6 +293,89 @@ export type Database = {
           },
         ]
       }
+      game_run_answers: {
+        Row: {
+          answers: Json
+          completed_at: string | null
+          id: string
+          run_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          answers?: Json
+          completed_at?: string | null
+          id?: string
+          run_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          answers?: Json
+          completed_at?: string | null
+          id?: string
+          run_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_run_answers_run_id_fkey"
+            columns: ["run_id"]
+            isOneToOne: false
+            referencedRelation: "game_runs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_run_answers_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      game_runs: {
+        Row: {
+          category: string | null
+          created_at: string
+          game_type: string
+          id: string
+          questions: Json
+          run_date: string
+          space_id: string
+          topic: string | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          game_type: string
+          id?: string
+          questions?: Json
+          run_date: string
+          space_id: string
+          topic?: string | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          game_type?: string
+          id?: string
+          questions?: Json
+          run_date?: string
+          space_id?: string
+          topic?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_runs_space_id_fkey"
+            columns: ["space_id"]
+            isOneToOne: false
+            referencedRelation: "spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       game_sessions: {
         Row: {
           category: string | null
@@ -830,6 +913,7 @@ export type Database = {
           handle: string
           id: string
           interests: string[]
+          timezone: string | null
           updated_at: string
         }
         Insert: {
@@ -840,6 +924,7 @@ export type Database = {
           handle: string
           id: string
           interests?: string[]
+          timezone?: string | null
           updated_at?: string
         }
         Update: {
@@ -850,6 +935,7 @@ export type Database = {
           handle?: string
           id?: string
           interests?: string[]
+          timezone?: string | null
           updated_at?: string
         }
         Relationships: []

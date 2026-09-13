@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { RotateCcw, HelpCircle } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
-import { createGameSession, submitGameAnswer, updateGameSessionPrompt, DailyCapReachedError } from "@/services/games-client";
+import { submitGameAnswer, updateGameSessionPrompt } from "@/services/games-client";
 import { getGameSession } from "@/services/games-read-client";
-import { pickBlindRankPrompt, swapBlindRankItem, warmAllBlindRankKinds, type BlindRankPrompt } from "@/lib/blind-rank-prompt";
+import { swapBlindRankItem, warmAllBlindRankKinds, type BlindRankPrompt } from "@/lib/blind-rank-prompt";
 import { sourceForKind } from "@/lib/play-content-categories";
 import { recordPlaySignal, recordPlaySignalForItems } from "@/services/play-signals-client";
 import { usePollForResult } from "@/hooks/usePollForResult";
@@ -123,28 +123,12 @@ export function BlindRankRound({ session: initialSession, roundNumber }: { sessi
     }
   }
 
-  async function nextRound() {
+  /** This screen only ever renders a leftover pre-daily-run session --
+   * new gameplay lives at the base route's daily run instead (see
+   * BlindRankRunScreen). */
+  function nextRound() {
     setStartingNext(true);
-    try {
-      const { prompt: next, topic } = await pickBlindRankPrompt(space.id);
-      const created = await createGameSession({
-        spaceId: space.id,
-        createdBy: userId,
-        otherMemberId: otherMember?.id ?? null,
-        gameType: "blind_rank",
-        topic,
-        category: next.category,
-        prompt: next,
-      });
-      router.push(`/play/blind-rank/${created.id}`);
-    } catch (err) {
-      if (err instanceof DailyCapReachedError) {
-        router.push("/play/blind-rank");
-        return;
-      }
-      show(getErrorMessage(err, "Couldn't start the next round."), "error");
-      setStartingNext(false);
-    }
+    router.push("/play/blind-rank");
   }
 
   return (

@@ -9,6 +9,7 @@ import { HideOnHome } from "@/components/HideOnHome";
 import { MainSurface } from "@/components/MainSurface";
 import { AppThemeShell } from "@/components/AppThemeShell";
 import { SessionProvider } from "@/components/SessionProvider";
+import { TimezoneSync } from "@/components/TimezoneSync";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await getSessionContext();
@@ -16,6 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <SessionProvider value={ctx}>
+      <TimezoneSync />
       <AppThemeShell>
         <DesktopSidebar />
         <div className="flex min-h-[100vh] min-w-0 flex-1 flex-col">

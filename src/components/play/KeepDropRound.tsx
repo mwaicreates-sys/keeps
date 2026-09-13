@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { Check, HelpCircle } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
-import { createGameSession, submitGameAnswer, updateGameSessionPrompt, DailyCapReachedError } from "@/services/games-client";
+import { submitGameAnswer, updateGameSessionPrompt } from "@/services/games-client";
 import { getGameSession } from "@/services/games-read-client";
-import { warmAllKeepDropKinds, pickKeepDropPrompt, swapKeepDropItem, KEEP_COUNT, type KeepDropPrompt } from "@/lib/keep-drop-prompt";
+import { warmAllKeepDropKinds, swapKeepDropItem, KEEP_COUNT, type KeepDropPrompt } from "@/lib/keep-drop-prompt";
 import { sourceForKind } from "@/lib/play-content-categories";
 import { recordPlaySignal, recordPlaySignalForItems } from "@/services/play-signals-client";
 import { usePollForResult } from "@/hooks/usePollForResult";
@@ -129,28 +129,12 @@ export function KeepDropRound({ session: initialSession, roundNumber }: { sessio
     }
   }
 
-  async function nextRound() {
+  /** This screen only ever renders a leftover pre-daily-run session --
+   * new gameplay lives at the base route's daily run instead (see
+   * KeepDropRunScreen). */
+  function nextRound() {
     setStartingNext(true);
-    try {
-      const { prompt: next, topic } = await pickKeepDropPrompt(space.id);
-      const created = await createGameSession({
-        spaceId: space.id,
-        createdBy: userId,
-        otherMemberId: otherMember?.id ?? null,
-        gameType: "keep3_drop2",
-        topic,
-        category: next.category,
-        prompt: next,
-      });
-      router.push(`/play/keep3-drop2/${created.id}`);
-    } catch (err) {
-      if (err instanceof DailyCapReachedError) {
-        router.push("/play/keep3-drop2");
-        return;
-      }
-      show(getErrorMessage(err, "Couldn't start the next round."), "error");
-      setStartingNext(false);
-    }
+    router.push("/play/keep3-drop2");
   }
 
   return (

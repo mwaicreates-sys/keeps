@@ -31,21 +31,21 @@ export function PlayGameCard({
   return (
     <Link
       href={href}
-      className="flex h-[200px] w-full min-w-0 flex-col overflow-hidden rounded-[22px] p-3.5 transition active:scale-[0.98]"
+      className="flex min-h-[152px] w-full min-w-0 flex-col rounded-[20px] p-3 transition active:scale-[0.98]"
       style={{ backgroundColor: bg }}
     >
       <div className="flex items-start justify-between">
-        <span className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl" style={{ backgroundColor: iconBg, color: iconColor }}>
-          <Icon size={27} strokeWidth={2} />
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl" style={{ backgroundColor: iconBg, color: iconColor }}>
+          <Icon size={21} strokeWidth={2} />
         </span>
-        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/70">
-          <ChevronRight size={20} className="text-[#00000060]" />
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white/70">
+          <ChevronRight size={16} className="text-[#00000060]" />
         </span>
       </div>
 
       <div className="mt-2 min-w-0 shrink-0">
-        <p className="text-[19px] font-extrabold leading-tight text-[#2c281f]">{title}</p>
-        <p className="mt-1 text-[14px] leading-[1.35] text-[#5c574c]">{subtitle}</p>
+        <p className="text-[15px] font-bold leading-tight text-[#2c281f]">{title}</p>
+        <p className="mt-0.5 text-[11.5px] leading-[1.3] text-[#5c574c]">{subtitle}</p>
       </div>
 
       <div className="mt-2 flex min-h-0 min-w-0 flex-1 items-end justify-end overflow-hidden">{preview}</div>

@@ -2,10 +2,16 @@ import { mbGet } from "@/lib/musicbrainz/client";
 import { getArtistImageViaWikidata, getWikimediaImageForQid } from "@/lib/wikidata/client";
 import { getReleaseGroupCoverArt } from "@/lib/coverartarchive/client";
 import { getFreshReleases, type FreshRelease } from "@/lib/listenbrainz/client";
-import { rankByFamiliarity, type FamiliarityProfile } from "@/services/play-providers/familiarity";
+import { rankByFamiliarity, pickSeedGenre, type FamiliarityProfile } from "@/services/play-providers/familiarity";
 import type { PlayItem } from "@/services/play-providers/types";
 
-const NO_PROFILE: FamiliarityProfile = { familiarNames: new Set(), itemSignalScores: new Map() };
+const NO_PROFILE: FamiliarityProfile = {
+  familiarNames: new Set(),
+  itemSignalScores: new Map(),
+  tasteArtistIds: new Set(),
+  tasteArtistNames: new Set(),
+  tasteGenres: new Set(),
+};
 
 /**
  * The music content flow, per provider role:
@@ -38,8 +44,11 @@ export type MusicFetchResult = {
 // being the same genre.
 const GENRE_SEEDS = ["pop", "hip hop", "r&b", "rock", "afrobeats", "amapiano", "indie", "electronic", "reggae", "soul"];
 
-function randomSeed(): string {
-  return GENRE_SEEDS[Math.floor(Math.random() * GENRE_SEEDS.length)];
+/** Prefers the space's own "Tune your Play" genre chips when any exist
+ * (so the search fallback leans toward what this space is actually
+ * into), otherwise rotates through the generic seed list as before. */
+function randomSeed(profile: FamiliarityProfile): string {
+  return pickSeedGenre(profile, GENRE_SEEDS);
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -105,6 +114,23 @@ export async function lookupArtist(mbid: string): Promise<ArtistLookup | null> {
   );
   if (!data.name) return null;
   return { id: mbid, name: data.name, disambiguation: data.disambiguation || null, wikidataQid: extractWikidataQid(data.relations) };
+}
+
+/** Real MusicBrainz folksonomy tags for one artist -- the closest thing
+ * MusicBrainz has to a "genre," and the mechanism "Tune your Play" uses
+ * to adapt suggestions toward what a user just picked (e.g. picking SZA
+ * surfaces her actual "r&b"/"neo soul" tags, then searches those tags
+ * for more artists) instead of guessing at adjacency. */
+export async function getArtistTags(mbid: string): Promise<string[]> {
+  try {
+    const data = await mbGet<{ tags?: { name: string; count: number }[] }>(`/artist/${mbid}?inc=tags`, 60 * 60 * 24 * 7);
+    return (data.tags ?? [])
+      .sort((a, b) => b.count - a.count)
+      .map((t) => t.name)
+      .slice(0, 3);
+  } catch {
+    return [];
+  }
 }
 
 type MbArtist = { id: string; name: string; disambiguation?: string };
@@ -196,26 +222,71 @@ async function artistsFromListenBrainz(
   return { items: [...rankedWithImages, ...rankedFiller].slice(0, count), failed };
 }
 
+/**
+ * Priority #1 per the product spec: artists the space directly seeded
+ * in "Tune your Play". A real MusicBrainz *lookup* (never search) for
+ * each -- these mbids are already known-good, so there's no search-
+ * fallback cost, just the same identity+image resolution every other
+ * artist item goes through.
+ */
+async function anchoredArtistItems(profile: FamiliarityProfile, count: number, exclude: Set<string>): Promise<PlayItem[]> {
+  const candidates = shuffle([...profile.tasteArtistIds].filter((id) => !exclude.has(id))).slice(0, count);
+  if (candidates.length === 0) return [];
+  const resolved = await Promise.all(
+    candidates.map(async (mbid) => {
+      try {
+        const lookup = await lookupArtist(mbid);
+        if (!lookup || !isUsableArtistName(lookup.name)) return null;
+        const imageUrl = lookup.wikidataQid ? await getWikimediaImageForQid(lookup.wikidataQid).catch(() => null) : null;
+        return {
+          id: mbid,
+          type: "artist" as const,
+          title: lookup.name,
+          subtitle: lookup.disambiguation,
+          imageUrl,
+          source: "musicbrainz",
+          discoverySource: "taste_seed",
+          imageSource: imageUrl ? "wikimedia" : null,
+          sourceUrl: `https://musicbrainz.org/artist/${mbid}`,
+        };
+      } catch {
+        return null;
+      }
+    })
+  );
+  return resolved.filter((i): i is NonNullable<typeof i> => i !== null);
+}
+
 export async function getArtistPlayItems(
   count: number,
   exclude: Set<string> = new Set(),
   profile: FamiliarityProfile = NO_PROFILE
 ): Promise<MusicFetchResult> {
-  const fromListenBrainz = await artistsFromListenBrainz(count, exclude, profile);
-  if (fromListenBrainz.items.length >= count) {
-    return { items: fromListenBrainz.items.slice(0, count), listenBrainzFailed: fromListenBrainz.failed, musicBrainzFailed: false };
+  // Taste-seeded artists come first, ahead of ListenBrainz discovery --
+  // per the spec's priority order, a direct taste-seed match beats even
+  // fresh/current content.
+  const anchored = profile.tasteArtistIds.size > 0 ? await anchoredArtistItems(profile, count, exclude) : [];
+  const excludeAfterAnchor = new Set([...exclude, ...anchored.map((i) => i.id)]);
+  if (anchored.length >= count) {
+    return { items: anchored.slice(0, count), listenBrainzFailed: false, musicBrainzFailed: false };
+  }
+
+  const fromListenBrainz = await artistsFromListenBrainz(count - anchored.length, excludeAfterAnchor, profile);
+  const combined = [...anchored, ...fromListenBrainz.items];
+  if (combined.length >= count) {
+    return { items: combined.slice(0, count), listenBrainzFailed: fromListenBrainz.failed, musicBrainzFailed: false };
   }
 
   // Fallback only -- ListenBrainz didn't surface enough usable, distinct
   // artists. Never the primary discovery mechanism.
-  const remaining = count - fromListenBrainz.items.length;
+  const remaining = count - combined.length;
   try {
-    const seed = randomSeed();
+    const seed = randomSeed(profile);
     const data = await mbGet<{ artists?: MbArtist[] }>(
       `/artist?query=${encodeURIComponent(`tag:${seed}`)}&limit=${Math.min(25, remaining * 6)}`,
       60 * 60 * 6
     );
-    const alreadyIds = new Set([...exclude, ...fromListenBrainz.items.map((i) => i.id)]);
+    const alreadyIds = new Set([...excludeAfterAnchor, ...fromListenBrainz.items.map((i) => i.id)]);
     const candidates = (data.artists ?? []).filter((a) => !alreadyIds.has(a.id) && isUsableArtistName(a.name));
     // Rank before resolving images -- familiarity decides which
     // candidates are worth spending an image lookup on, not just
@@ -241,9 +312,9 @@ export async function getArtistPlayItems(
         };
       })
     );
-    return { items: [...fromListenBrainz.items, ...extra], listenBrainzFailed: fromListenBrainz.failed, musicBrainzFailed: false };
+    return { items: [...combined, ...extra], listenBrainzFailed: fromListenBrainz.failed, musicBrainzFailed: false };
   } catch {
-    return { items: fromListenBrainz.items, listenBrainzFailed: fromListenBrainz.failed, musicBrainzFailed: true };
+    return { items: combined, listenBrainzFailed: fromListenBrainz.failed, musicBrainzFailed: true };
   }
 }
 
@@ -294,24 +365,78 @@ async function albumsFromListenBrainz(
   return { items: [...rankedWithImages, ...rankedFiller].slice(0, count), failed };
 }
 
+/**
+ * Priority #1 for albums: real release-groups *by* the space's seeded
+ * artists (not just the artists themselves) -- "an album from an
+ * artist dropped/seeded" is explicitly called out as good content in
+ * the spec. Draws from a few random seeded artists per call so a
+ * 5-artist seed doesn't always surface the same one first.
+ */
+async function anchoredAlbumItems(profile: FamiliarityProfile, count: number, exclude: Set<string>): Promise<PlayItem[]> {
+  const artistMbids = shuffle([...profile.tasteArtistIds]).slice(0, Math.max(2, Math.min(4, count)));
+  if (artistMbids.length === 0) return [];
+
+  const groups: MbReleaseGroup[] = [];
+  for (const artistMbid of artistMbids) {
+    try {
+      const data = await mbGet<{ "release-groups"?: MbReleaseGroup[] }>(
+        `/release-group?artist=${artistMbid}&primarytype=album&limit=10`,
+        60 * 60 * 24
+      );
+      for (const rg of data["release-groups"] ?? []) {
+        if (!exclude.has(rg.id) && !isGenericAlbumTitle(rg.title)) groups.push(rg);
+      }
+    } catch {
+      // One seeded artist's release-groups failing shouldn't cost the
+      // others -- just fewer anchored candidates this round.
+    }
+  }
+
+  const withImages: PlayItem[] = [];
+  for (const rg of shuffle(groups)) {
+    if (withImages.length >= count) break;
+    const imageUrl = await getReleaseGroupCoverArt(rg.id);
+    if (!imageUrl) continue; // image-first: an anchored pick without art isn't worth it when the artist alone can't visually anchor an album round
+    withImages.push({
+      id: rg.id,
+      type: "album",
+      title: rg.title,
+      subtitle: rg["artist-credit"]?.map((c) => c.name).join(", ") ?? null,
+      imageUrl,
+      source: "musicbrainz",
+      discoverySource: "taste_seed",
+      imageSource: "coverartarchive",
+      sourceUrl: `https://musicbrainz.org/release-group/${rg.id}`,
+    });
+  }
+  return withImages;
+}
+
 export async function getAlbumPlayItems(
   count: number,
   exclude: Set<string> = new Set(),
   profile: FamiliarityProfile = NO_PROFILE
 ): Promise<MusicFetchResult> {
-  const fromListenBrainz = await albumsFromListenBrainz(count, exclude, profile);
-  if (fromListenBrainz.items.length >= count) {
-    return { items: fromListenBrainz.items.slice(0, count), listenBrainzFailed: fromListenBrainz.failed, musicBrainzFailed: false };
+  const anchored = profile.tasteArtistIds.size > 0 ? await anchoredAlbumItems(profile, count, exclude) : [];
+  const excludeAfterAnchor = new Set([...exclude, ...anchored.map((i) => i.id)]);
+  if (anchored.length >= count) {
+    return { items: anchored.slice(0, count), listenBrainzFailed: false, musicBrainzFailed: false };
   }
 
-  const remaining = count - fromListenBrainz.items.length;
+  const fromListenBrainz = await albumsFromListenBrainz(count - anchored.length, excludeAfterAnchor, profile);
+  const combined = [...anchored, ...fromListenBrainz.items];
+  if (combined.length >= count) {
+    return { items: combined.slice(0, count), listenBrainzFailed: fromListenBrainz.failed, musicBrainzFailed: false };
+  }
+
+  const remaining = count - combined.length;
   try {
-    const seed = randomSeed();
+    const seed = randomSeed(profile);
     const data = await mbGet<{ "release-groups"?: MbReleaseGroup[] }>(
       `/release-group?query=${encodeURIComponent(`tag:${seed} AND primarytype:album`)}&limit=${Math.min(25, remaining * 6)}`,
       60 * 60 * 6
     );
-    const alreadyIds = new Set([...exclude, ...fromListenBrainz.items.map((i) => i.id)]);
+    const alreadyIds = new Set([...excludeAfterAnchor, ...fromListenBrainz.items.map((i) => i.id)]);
     const candidates = (data["release-groups"] ?? []).filter((rg) => {
       if (alreadyIds.has(rg.id) || isGenericAlbumTitle(rg.title)) return false;
       const artistName = rg["artist-credit"]?.map((c) => c.name).join(", ");
@@ -338,9 +463,9 @@ export async function getAlbumPlayItems(
         };
       })
     );
-    return { items: [...fromListenBrainz.items, ...extra], listenBrainzFailed: fromListenBrainz.failed, musicBrainzFailed: false };
+    return { items: [...combined, ...extra], listenBrainzFailed: fromListenBrainz.failed, musicBrainzFailed: false };
   } catch {
-    return { items: fromListenBrainz.items, listenBrainzFailed: fromListenBrainz.failed, musicBrainzFailed: true };
+    return { items: combined, listenBrainzFailed: fromListenBrainz.failed, musicBrainzFailed: true };
   }
 }
 
@@ -354,7 +479,7 @@ export async function getTrackPlayItems(
   profile: FamiliarityProfile = NO_PROFILE
 ): Promise<MusicFetchResult> {
   try {
-    const seed = randomSeed();
+    const seed = randomSeed(profile);
     const data = await mbGet<{ recordings?: MbRecording[] }>(
       `/recording?query=${encodeURIComponent(`tag:${seed}`)}&limit=${Math.min(25, count * 6)}`,
       60 * 60 * 6
@@ -390,5 +515,79 @@ export async function getTrackPlayItems(
     return { items, listenBrainzFailed: false, musicBrainzFailed: false };
   } catch {
     return { items: [], listenBrainzFailed: false, musicBrainzFailed: true };
+  }
+}
+
+/**
+ * Real MusicBrainz artists tagged with a given genre/tag -- how "Tune
+ * your Play" adapts its suggestions once the user has picked a couple
+ * of artists (see getArtistTags): look up what they're actually tagged
+ * with, then search *that* tag for more real, recognizable names,
+ * rather than guessing at adjacency.
+ */
+export async function searchArtistsByTag(tag: string, count: number, exclude: Set<string> = new Set()): Promise<PlayItem[]> {
+  try {
+    const data = await mbGet<{ artists?: MbArtist[] }>(
+      `/artist?query=${encodeURIComponent(`tag:"${tag}"`)}&limit=${Math.min(25, count * 3)}`,
+      60 * 60 * 6
+    );
+    const candidates = (data.artists ?? []).filter((a) => !exclude.has(a.id) && isUsableArtistName(a.name)).slice(0, count);
+    const items = await Promise.all(
+      candidates.map(async (a) => {
+        const imageUrl = await getArtistImageViaWikidata(a.id);
+        return {
+          id: a.id,
+          type: "artist" as const,
+          title: a.name,
+          subtitle: a.disambiguation ?? null,
+          imageUrl,
+          source: "musicbrainz",
+          discoverySource: "musicbrainz",
+          imageSource: imageUrl ? "wikimedia" : null,
+          sourceUrl: `https://musicbrainz.org/artist/${a.id}`,
+        };
+      })
+    );
+    return items;
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Free-text artist search for "Tune your Play" -- a real MusicBrainz
+ * name search, resolved into the same visual PlayItem shape (real
+ * photo via Wikidata/Wikimedia) as everywhere else artists appear.
+ * Used only by the taste-seeding search box, never by round
+ * generation itself.
+ */
+export async function searchArtists(query: string, count = 8): Promise<PlayItem[]> {
+  const trimmed = query.trim();
+  if (!trimmed) return [];
+  try {
+    const data = await mbGet<{ artists?: MbArtist[] }>(
+      `/artist?query=${encodeURIComponent(`artist:"${trimmed}"`)}&limit=${Math.min(20, count * 2)}`,
+      60 * 60 * 24
+    );
+    const candidates = (data.artists ?? []).filter((a) => isUsableArtistName(a.name)).slice(0, count);
+    const items = await Promise.all(
+      candidates.map(async (a) => {
+        const imageUrl = await getArtistImageViaWikidata(a.id);
+        return {
+          id: a.id,
+          type: "artist" as const,
+          title: a.name,
+          subtitle: a.disambiguation ?? null,
+          imageUrl,
+          source: "musicbrainz",
+          discoverySource: "musicbrainz",
+          imageSource: imageUrl ? "wikimedia" : null,
+          sourceUrl: `https://musicbrainz.org/artist/${a.id}`,
+        };
+      })
+    );
+    return items;
+  } catch {
+    return [];
   }
 }

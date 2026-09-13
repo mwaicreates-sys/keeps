@@ -1,6 +1,10 @@
+import Link from "next/link";
+import { SlidersHorizontal } from "lucide-react";
 import { getSessionContext } from "@/services/session";
 import { createClient } from "@/lib/supabase/server";
+import { getTasteProfileServer } from "@/services/taste-profile-server";
 import { PlayGameCard } from "@/components/play/PlayGameCard";
+import { TuneNudgeBanner } from "@/components/play/TuneNudgeBanner";
 import {
   ThisOrThatPreview,
   Top5Preview,
@@ -27,12 +31,26 @@ export default async function PlayPage() {
     .limit(1)
     .maybeSingle();
 
+  const { artists: tasteArtists } = await getTasteProfileServer(ctx.space.id, ctx.userId);
+
   return (
     <div className="mx-auto w-full max-w-xl pb-4 md:max-w-2xl md:py-4">
-      <div className="px-4 pb-4 pt-2">
-        <h1 className="text-[32px] font-bold leading-[1.1] tracking-tight text-[#3a362f]">Play</h1>
-        <p className="mt-1 text-[13px] text-[#a39d92]">Little games for the two of you.</p>
+      <div className="flex items-start justify-between px-4 pb-4 pt-2">
+        <div>
+          <h1 className="text-[32px] font-bold leading-[1.1] tracking-tight text-[#3a362f]">Play</h1>
+          <p className="mt-1 text-[13px] text-[#a39d92]">Little games for the two of you.</p>
+        </div>
+        {/* Deliberately subtle -- a settings entry, not a gameplay CTA. */}
+        <Link
+          href="/play/tune?edit=1"
+          aria-label="Tune your Play"
+          className="mt-1 grid h-9 w-9 shrink-0 place-items-center rounded-full text-[#a39d92]"
+        >
+          <SlidersHorizontal size={18} />
+        </Link>
       </div>
+
+      <TuneNudgeBanner hasProfile={tasteArtists.length > 0} />
 
       <div className="grid grid-cols-2 gap-3 px-4">
         {PLAY_GAMES.map((game) => (

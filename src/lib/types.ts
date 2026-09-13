@@ -557,6 +557,45 @@ export type Database = {
           },
         ]
       }
+      play_taste_profiles: {
+        Row: {
+          music_artist_ids: Json
+          music_genres: string[]
+          space_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          music_artist_ids?: Json
+          music_genres?: string[]
+          space_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          music_artist_ids?: Json
+          music_genres?: string[]
+          space_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "play_taste_profiles_space_id_fkey"
+            columns: ["space_id"]
+            isOneToOne: false
+            referencedRelation: "spaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "play_taste_profiles_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       post_favorite_metadata: {
         Row: {
           favorite_type: string

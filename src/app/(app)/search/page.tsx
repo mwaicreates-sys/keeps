@@ -1,16 +1,50 @@
 import Link from "next/link";
-import { ArrowLeft, Search as SearchIcon, Music2, FolderHeart, Sparkles } from "lucide-react";
+import {
+  Search as SearchIcon,
+  Music2,
+  FolderHeart,
+  Sparkles,
+  Image as ImageIcon,
+  Video,
+  Type as TypeIcon,
+  MapPin,
+  Star,
+  Gamepad2,
+  type LucideIcon,
+} from "lucide-react";
 import { getSessionContext } from "@/services/session";
-import { searchSpace } from "@/services/search-server";
-import { getRecentMedia } from "@/services/posts-server";
+import { createClient } from "@/lib/supabase/server";
+import { searchSpace, gameHref, type SearchResultType } from "@/services/search-server";
+import { getFeed } from "@/services/posts-server";
 import { EmptyState } from "@/components/EmptyState";
+import { HomeHeader } from "@/components/home/HomeHeader";
 import { SearchField } from "@/components/search/SearchField";
+import { SearchShowcase } from "@/components/search/SearchShowcase";
+import { SearchShortcuts } from "@/components/search/SearchShortcuts";
 
-// Own header (back arrow + search field) -- the Home top bar only
-// appears on Home. No query yet: show a recent-media showcase rail and
-// quick shortcuts (your real profile interests). With a query: live,
-// grouped results that update as you type (SearchField debounces and
-// soft-navigates, so this whole page just re-runs on the new q).
+// Same top bar as Home/Memories/Drop/Profile (search/wordmark/bell) --
+// this page's own search field lives below it, in the body.
+
+const TYPE_FILTERS: { type?: SearchResultType; label: string }[] = [
+  { type: undefined, label: "All" },
+  { type: "photo", label: "Photos" },
+  { type: "video", label: "Video" },
+  { type: "song", label: "Songs" },
+  { type: "text", label: "Text" },
+  { type: "activity", label: "Activity" },
+  { type: "favorite", label: "Favorites" },
+  { type: "collection", label: "Collections" },
+  { type: "game", label: "Games" },
+];
+
+const TYPE_ICON: Record<string, LucideIcon> = {
+  photo: ImageIcon,
+  video: Video,
+  song: Music2,
+  text: TypeIcon,
+  activity: MapPin,
+  favorite: Star,
+};
 
 function ResultRow({
   href,
@@ -23,7 +57,7 @@ function ResultRow({
 }: {
   href: string;
   cover?: string | null;
-  fallbackIcon: typeof Music2;
+  fallbackIcon: LucideIcon;
   fallbackBg: string;
   fallbackColor: string;
   title: string;
@@ -53,85 +87,121 @@ function ResultRow({
   );
 }
 
-function ResultSection({ title, children }: { title: string; children: React.ReactNode }) {
+function ResultSection({
+  icon: Icon,
+  title,
+  count,
+  seeAllHref,
+  children,
+}: {
+  icon: LucideIcon;
+  title: string;
+  count: number;
+  seeAllHref?: string;
+  children: React.ReactNode;
+}) {
   return (
     <section>
-      <p className="mb-2 text-[12.5px] font-semibold text-[#3a362f]">{title}</p>
+      <div className="mb-2 flex items-center justify-between">
+        <p className="flex items-center gap-1.5 text-[12.5px] font-semibold text-[#3a362f]">
+          <Icon size={14} className="text-[#a39d92]" /> {title} <span className="text-[#a39d92]">{count}</span>
+        </p>
+        {seeAllHref && (
+          <Link href={seeAllHref} className="text-[11.5px] font-medium text-[#a39d92]">
+            See all
+          </Link>
+        )}
+      </div>
       <ul className="space-y-1.5">{children}</ul>
     </section>
   );
 }
 
-export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const { q = "" } = await searchParams;
+export default async function SearchPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; type?: SearchResultType }>;
+}) {
+  const { q = "", type } = await searchParams;
   const ctx = await getSessionContext();
   if (!ctx) return null;
 
-  const [results, recentMedia] = await Promise.all([
-    q ? searchSpace(ctx.space.id, q) : Promise.resolve(null),
-    q ? Promise.resolve([]) : getRecentMedia(ctx.space.id, ctx.userId, 6),
+  const supabase = await createClient();
+  const { count: unreadCount } = await supabase
+    .from("notifications")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", ctx.userId)
+    .is("read_at", null);
+
+  const [results, feedSample] = await Promise.all([
+    q ? searchSpace(ctx.space.id, q, type) : Promise.resolve(null),
+    q ? Promise.resolve([]) : getFeed(ctx.space.id, ctx.userId, 15),
   ]);
-  const total = results ? results.posts.length + results.songs.length + results.collections.length : 0;
+  const total = results ? results.posts.length + results.songs.length + results.collections.length + results.games.length : 0;
+
+  const showcasePhoto = feedSample.flatMap((p) => p.media).find((m) => m.media_type === "photo") ?? null;
+  const showcaseSong = feedSample.find((p) => p.song)?.song ?? null;
+  const showcaseText = feedSample.find((p) => p.type === "text" && p.caption) ?? null;
 
   return (
     <div className="mx-auto w-full max-w-xl pb-4 md:max-w-2xl md:py-4">
-      <div className="flex items-center gap-3 px-3 pb-3 pt-2">
-        <Link href="/home" aria-label="Back" className="grid h-11 w-11 shrink-0 place-items-center rounded-full text-[#3a362f]">
-          <ArrowLeft size={24} strokeWidth={2} />
-        </Link>
+      <HomeHeader unreadCount={unreadCount ?? 0} />
+
+      <div className="px-4 pb-3 pt-1">
+        {!q && (
+          <SearchShowcase
+            photo={showcasePhoto}
+            song={showcaseSong ? { title: showcaseSong.title, artist: showcaseSong.artist } : null}
+            text={showcaseText ? { caption: showcaseText.caption! } : null}
+          />
+        )}
         <SearchField initialQuery={q} />
       </div>
 
+      {q && (
+        <div className="no-scrollbar mb-3 flex gap-1.5 overflow-x-auto px-4 pb-1">
+          {TYPE_FILTERS.map(({ type: t, label }) => {
+            const active = type === t || (!type && !t);
+            const params = new URLSearchParams({ q });
+            if (t) params.set("type", t);
+            return (
+              <Link
+                key={label}
+                href={`/search?${params.toString()}`}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-[12px] font-medium ${
+                  active ? "bg-[#3a362f] text-white" : "bg-white text-[#7c766c]"
+                }`}
+              >
+                {label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+
       <div className="px-4">
         {!q ? (
-          <div className="space-y-6">
-            {recentMedia.length > 0 && (
-              <section>
-                <p className="mb-2 text-[12.5px] font-semibold text-[#3a362f]">Recent</p>
-                <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
-                  {recentMedia.map((m) => (
-                    <div key={m.id} className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-[#f2efe9]">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={m.url} alt="" className="h-full w-full object-cover" />
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {ctx.profile.interests.length > 0 && (
-              <section>
-                <p className="mb-2 text-[12.5px] font-semibold text-[#3a362f]">Try searching</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {ctx.profile.interests.map((interest) => (
-                    <Link
-                      key={interest}
-                      href={`/search?q=${encodeURIComponent(interest)}`}
-                      className="rounded-full bg-white px-3 py-1.5 text-[12px] font-medium text-[#3a362f] shadow-[0_2px_10px_-6px_rgba(20,18,15,0.12)]"
-                    >
-                      {interest}
-                    </Link>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {recentMedia.length === 0 && ctx.profile.interests.length === 0 && (
-              <EmptyState icon={SearchIcon} title="Search your space" body="Find posts, memories, songs, and collections." />
-            )}
-          </div>
+          <SearchShortcuts q={q} activeType={type} />
         ) : total === 0 ? (
-          <EmptyState icon={SearchIcon} title="No results" body={`Nothing matched "${q}" yet.`} />
+          <div className="space-y-5">
+            <EmptyState icon={SearchIcon} title="No results" body={`Nothing matched "${q}" yet.`} />
+            <SearchShortcuts q="" />
+          </div>
         ) : (
           <div className="space-y-5">
             {results!.posts.length > 0 && (
-              <ResultSection title="Posts & Memories">
+              <ResultSection
+                icon={TYPE_ICON[results!.posts[0].type] ?? Sparkles}
+                title={type ? TYPE_FILTERS.find((f) => f.type === type)?.label ?? "Memories" : "Memories"}
+                count={results!.posts.length}
+                seeAllHref={`/search?q=${encodeURIComponent(q)}&type=${results!.posts[0].type}`}
+              >
                 {results!.posts.map((p) => (
                   <li key={p.id}>
                     <ResultRow
                       href={`/memories/${p.id}`}
                       cover={p.cover}
-                      fallbackIcon={Sparkles}
+                      fallbackIcon={TYPE_ICON[p.type] ?? Sparkles}
                       fallbackBg="#fdf3e0"
                       fallbackColor="#c99a2e"
                       title={p.caption || `A ${p.type}`}
@@ -143,7 +213,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
             )}
 
             {results!.songs.length > 0 && (
-              <ResultSection title="Songs">
+              <ResultSection icon={Music2} title="Songs" count={results!.songs.length} seeAllHref={`/search?q=${encodeURIComponent(q)}&type=song`}>
                 {results!.songs.map((s) => (
                   <li key={s.post_id}>
                     <ResultRow
@@ -161,7 +231,12 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
             )}
 
             {results!.collections.length > 0 && (
-              <ResultSection title="Collections">
+              <ResultSection
+                icon={FolderHeart}
+                title="Collections"
+                count={results!.collections.length}
+                seeAllHref={`/search?q=${encodeURIComponent(q)}&type=collection`}
+              >
                 {results!.collections.map((c) => (
                   <li key={c.id}>
                     <ResultRow
@@ -171,6 +246,22 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
                       fallbackBg="#faf1e2"
                       fallbackColor="#a3742b"
                       title={c.name}
+                    />
+                  </li>
+                ))}
+              </ResultSection>
+            )}
+
+            {results!.games.length > 0 && (
+              <ResultSection icon={Gamepad2} title="Games" count={results!.games.length} seeAllHref={`/search?q=${encodeURIComponent(q)}&type=game`}>
+                {results!.games.map((g) => (
+                  <li key={g.id}>
+                    <ResultRow
+                      href={gameHref(g.game_type)}
+                      fallbackIcon={Gamepad2}
+                      fallbackBg="#eaeafb"
+                      fallbackColor="#5457c7"
+                      title={g.topic}
                     />
                   </li>
                 ))}

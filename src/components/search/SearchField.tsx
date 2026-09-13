@@ -1,25 +1,28 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Search as SearchIcon } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Search as SearchIcon, X } from "lucide-react";
 
 /**
  * Debounced, URL-driven search field: typing updates the `q` query
  * param 300ms after the last keystroke, which re-runs the (server
- * component) search page with a soft navigation — no full reload, no
- * flash, and the header/shortcuts around it never remount.
+ * component) search page with a soft navigation -- no full reload, no
+ * flash, and the header/shortcuts around it never remount. Keeps
+ * whatever `type` scope is already active in the URL.
  */
 export function SearchField({ initialQuery }: { initialQuery: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [value, setValue] = useState(initialQuery);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
     timeoutRef.current = setTimeout(() => {
-      const params = new URLSearchParams();
+      const params = new URLSearchParams(searchParams.toString());
       if (value.trim()) params.set("q", value.trim());
+      else params.delete("q");
       const qs = params.toString();
       router.replace(qs ? `/search?${qs}` : "/search");
     }, 300);
@@ -36,9 +39,19 @@ export function SearchField({ initialQuery }: { initialQuery: string }) {
         value={value}
         onChange={(e) => setValue(e.target.value)}
         autoFocus
-        placeholder="football, 2026, Kendrick, funny…"
-        className="w-full min-w-0 bg-transparent text-[16px] text-[#3a362f] outline-none placeholder:text-[#a39d92]"
+        placeholder="Search memories, songs, posts, games, tags…"
+        className="w-full min-w-0 bg-transparent text-[15px] text-[#3a362f] outline-none placeholder:text-[#a39d92]"
       />
+      {value && (
+        <button
+          type="button"
+          onClick={() => setValue("")}
+          aria-label="Clear search"
+          className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[#e7dcc9] text-[#7c766c]"
+        >
+          <X size={12} strokeWidth={2.5} />
+        </button>
+      )}
     </label>
   );
 }

@@ -8,7 +8,7 @@ import Link from "next/link";
 import { useSession } from "@/components/SessionProvider";
 
 export function StoryRail({ stories, currentUserId }: { stories: StoryWithAuthor[]; currentUserId: string }) {
-  const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const [openGroupIndex, setOpenGroupIndex] = useState<number | null>(null);
   const { profile, members } = useSession();
 
   const latestByAuthor = new Map<string, StoryWithAuthor>();
@@ -17,6 +17,20 @@ export function StoryRail({ stories, currentUserId }: { stories: StoryWithAuthor
   }
   const hasUnseen = (authorId: string) =>
     stories.some((s) => s.author_id === authorId && !s.viewed && authorId !== currentUserId);
+
+  // One group per person, each holding only that person's own stories in
+  // order (stories arrives oldest-first) -- stories are never combined
+  // across authors. `groups` is ordered to match the tile row so tapping
+  // a tile and swiping through people move through the same sequence.
+  const groups: StoryWithAuthor[][] = members
+    .map((member) => stories.filter((s) => s.author_id === member.id))
+    .filter((group) => group.length > 0);
+
+  function openMemberStories(authorId: string) {
+    const groupIndex = groups.findIndex((g) => g[0].author_id === authorId);
+    if (groupIndex === -1) return;
+    setOpenGroupIndex(groupIndex);
+  }
 
   return (
     <>
@@ -34,17 +48,17 @@ export function StoryRail({ stories, currentUserId }: { stories: StoryWithAuthor
               key={member.id}
               story={story}
               unseen={hasUnseen(member.id)}
-              onOpen={() => setOpenIndex(stories.indexOf(story))}
+              onOpen={() => openMemberStories(member.id)}
             />
           );
         })}
       </div>
-      {openIndex !== null && (
+      {openGroupIndex !== null && (
         <StoryViewer
-          stories={stories}
-          startIndex={openIndex}
+          groups={groups}
+          startGroupIndex={openGroupIndex}
           currentUserId={currentUserId}
-          onClose={() => setOpenIndex(null)}
+          onClose={() => setOpenGroupIndex(null)}
         />
       )}
     </>

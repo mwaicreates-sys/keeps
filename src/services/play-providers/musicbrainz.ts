@@ -1,15 +1,21 @@
 import { mbGet } from "@/lib/musicbrainz/client";
 import { getWikimediaImageForQid } from "@/lib/wikidata/client";
-import { getReleaseGroupCoverArt } from "@/lib/coverartarchive/client";
+import { getReleaseGroupCoverArt, getReleaseGroupCoverArtBatch } from "@/lib/coverartarchive/client";
 import { getFreshReleases, type FreshRelease } from "@/lib/listenbrainz/client";
 import { rankByFamiliarity, pickSeedGenre, type FamiliarityProfile } from "@/services/play-providers/familiarity";
 import {
-  getCachedArtistVisual,
-  setCachedArtistVisual,
   getCachedArtistIdByName,
   setCachedArtistIdByName,
+  getCachedArtistVisualsBatch,
+  setCachedArtistVisualsBatch,
 } from "@/services/play-providers/content-cache";
+import { mapWithConcurrency } from "@/lib/bounded-concurrency";
 import type { PlayItem } from "@/services/play-providers/types";
+
+// Wikidata/Wikimedia have no in-process throttle the way MusicBrainz
+// does (see mbGet's queue) -- bounded concurrency here is what keeps a
+// large pool's cache misses from firing 20+ of those requests at once.
+const ARTIST_IMAGE_RESOLVE_CONCURRENCY = 5;
 
 const NO_PROFILE: FamiliarityProfile = {
   familiarNames: new Set(),
@@ -124,23 +130,11 @@ export async function lookupArtist(mbid: string): Promise<ArtistLookup | null> {
 
 export type ArtistVisual = { name: string; disambiguation: string | null; imageUrl: string | null };
 
-/**
- * The single entry point every artist-resolving path should use.
- * Checks the persistent play_content_cache first -- on a hit, this
- * returns in one fast DB read with *zero* MusicBrainz/Wikidata/
- * Wikimedia calls (and so doesn't touch the rate-limited queue at
- * all). Only on a miss does it walk the real MBID -> Wikidata ->
- * Wikimedia chain, then writes the result back so every future
- * request for this artist (any user, any space) is a cache hit.
- */
-export async function resolveArtistVisual(mbid: string, knownName?: string): Promise<ArtistVisual | null> {
-  const cached = await getCachedArtistVisual(mbid);
-  if (cached !== undefined) {
-    console.log("[perf]", JSON.stringify({ label: "artist_visual", mbid, cache: "hit" }));
-    return cached;
-  }
-  console.log("[perf]", JSON.stringify({ label: "artist_visual", mbid, cache: "miss" }));
-
+/** The real MBID -> Wikidata -> Wikimedia resolution chain, with no
+ * cache read/write of its own -- resolveArtistVisualsBatch is what
+ * decides which mbids actually need this (the cache misses) and what
+ * writes the result back, once, for the whole batch. */
+async function resolveArtistVisualUncached(mbid: string, knownName?: string): Promise<ArtistVisual | null> {
   let name = knownName ?? null;
   let disambiguation: string | null = null;
   let imageUrl: string | null = null;
@@ -157,10 +151,64 @@ export async function resolveArtistVisual(mbid: string, knownName?: string): Pro
     // rather than losing the item entirely.
   }
   if (!name) return null;
+  return { name, disambiguation, imageUrl };
+}
 
-  const visual: ArtistVisual = { name, disambiguation, imageUrl };
-  await setCachedArtistVisual(mbid, visual);
-  return visual;
+/**
+ * The batch entry point every pool builder should use when it already
+ * knows its whole candidate list up front: ONE play_content_cache read
+ * for every mbid (not one per mbid), cache misses resolved through the
+ * real MBID -> Wikidata -> Wikimedia chain with bounded concurrency
+ * (never all-at-once), then ONE batched write for whatever resolved.
+ * Replaces what used to be N individual getCachedArtistVisual reads +
+ * up to N individual setCachedArtistVisual writes inside a
+ * Promise.all -- same resolution logic, same cache semantics, just one
+ * Supabase round trip on each side instead of one per candidate.
+ */
+export async function resolveArtistVisualsBatch(items: { mbid: string; knownName?: string }[]): Promise<Map<string, ArtistVisual | null>> {
+  const result = new Map<string, ArtistVisual | null>();
+  if (items.length === 0) return result;
+
+  const ids = items.map((i) => i.mbid);
+  const cacheStart = Date.now();
+  const cached = await getCachedArtistVisualsBatch(ids);
+  const misses = items.filter((i) => !cached.has(i.mbid));
+  for (const [mbid, visual] of cached) result.set(mbid, visual);
+  console.log(
+    "[perf]",
+    JSON.stringify({ label: "artist_visual_batch", requested: ids.length, cacheHits: cached.size, cacheMisses: misses.length, cacheReadMs: Date.now() - cacheStart })
+  );
+
+  if (misses.length > 0) {
+    const resolveStart = Date.now();
+    const resolved = await mapWithConcurrency(misses, ARTIST_IMAGE_RESOLVE_CONCURRENCY, async (m) => ({
+      mbid: m.mbid,
+      visual: await resolveArtistVisualUncached(m.mbid, m.knownName),
+    }));
+    console.log(
+      "[perf]",
+      JSON.stringify({ label: "artist_visual_batch", phase: "resolve_misses", count: misses.length, durationMs: Date.now() - resolveStart })
+    );
+    const toWrite: { mbid: string; visual: ArtistVisual }[] = [];
+    for (const { mbid, visual } of resolved) {
+      result.set(mbid, visual);
+      if (visual) toWrite.push({ mbid, visual });
+    }
+    await setCachedArtistVisualsBatch(toWrite);
+  }
+
+  return result;
+}
+
+/**
+ * Single-mbid convenience wrapper around resolveArtistVisualsBatch, for
+ * the handful of call sites that only ever need one artist at a time
+ * (an exact-name search hit). Same cache semantics, just not worth a
+ * batch of one.
+ */
+export async function resolveArtistVisual(mbid: string, knownName?: string): Promise<ArtistVisual | null> {
+  const result = await resolveArtistVisualsBatch([{ mbid, knownName }]);
+  return result.get(mbid) ?? null;
 }
 
 /** Real MusicBrainz folksonomy tags for one artist -- the closest thing
@@ -222,26 +270,26 @@ async function artistsFromListenBrainz(
   const shuffled = shuffle(candidates);
   const attempted = shuffled.slice(0, Math.min(shuffled.length, count + 4));
 
-  const resolved = await Promise.all(
-    attempted.map(async (a) => {
-      // Preferred flow: ListenBrainz already gave a real MBID, so
-      // resolveArtistVisual either serves a cached identity+image in
-      // one DB read, or -- on a miss -- does the MusicBrainz lookup ->
-      // Wikidata -> Wikimedia chain once and caches it for next time.
-      const visual = await resolveArtistVisual(a.mbid, a.name);
-      return {
-        id: a.mbid,
-        type: "artist" as const,
-        title: visual?.name ?? a.name,
-        subtitle: visual?.disambiguation ?? null,
-        imageUrl: visual?.imageUrl ?? null,
-        source: "musicbrainz",
-        discoverySource: "listenbrainz",
-        imageSource: visual?.imageUrl ? "wikimedia" : null,
-        sourceUrl: `https://musicbrainz.org/artist/${a.mbid}`,
-      };
-    })
-  );
+  // Preferred flow: ListenBrainz already gave real MBIDs, so this is
+  // one batched play_content_cache read for every attempted candidate
+  // (not one per candidate) -- a miss does the MusicBrainz lookup ->
+  // Wikidata -> Wikimedia chain and gets cached for next time, in one
+  // batched write at the end.
+  const visuals = await resolveArtistVisualsBatch(attempted.map((a) => ({ mbid: a.mbid, knownName: a.name })));
+  const resolved = attempted.map((a) => {
+    const visual = visuals.get(a.mbid);
+    return {
+      id: a.mbid,
+      type: "artist" as const,
+      title: visual?.name ?? a.name,
+      subtitle: visual?.disambiguation ?? null,
+      imageUrl: visual?.imageUrl ?? null,
+      source: "musicbrainz",
+      discoverySource: "listenbrainz",
+      imageSource: visual?.imageUrl ? "wikimedia" : null,
+      sourceUrl: `https://musicbrainz.org/artist/${a.mbid}`,
+    };
+  });
 
   // Image-first, then familiarity-first within each group: prefer
   // resolved candidates that actually have a photo AND that the space
@@ -265,23 +313,22 @@ async function artistsFromListenBrainz(
 async function anchoredArtistItems(profile: FamiliarityProfile, count: number, exclude: Set<string>): Promise<PlayItem[]> {
   const candidates = shuffle([...profile.tasteArtistIds].filter((id) => !exclude.has(id))).slice(0, count);
   if (candidates.length === 0) return [];
-  const resolved = await Promise.all(
-    candidates.map(async (mbid) => {
-      const visual = await resolveArtistVisual(mbid);
-      if (!visual || !isUsableArtistName(visual.name)) return null;
-      return {
-        id: mbid,
-        type: "artist" as const,
-        title: visual.name,
-        subtitle: visual.disambiguation,
-        imageUrl: visual.imageUrl,
-        source: "musicbrainz",
-        discoverySource: "taste_seed",
-        imageSource: visual.imageUrl ? "wikimedia" : null,
-        sourceUrl: `https://musicbrainz.org/artist/${mbid}`,
-      };
-    })
-  );
+  const visuals = await resolveArtistVisualsBatch(candidates.map((mbid) => ({ mbid })));
+  const resolved = candidates.map((mbid) => {
+    const visual = visuals.get(mbid);
+    if (!visual || !isUsableArtistName(visual.name)) return null;
+    return {
+      id: mbid,
+      type: "artist" as const,
+      title: visual.name,
+      subtitle: visual.disambiguation,
+      imageUrl: visual.imageUrl,
+      source: "musicbrainz",
+      discoverySource: "taste_seed",
+      imageSource: visual.imageUrl ? "wikimedia" : null,
+      sourceUrl: `https://musicbrainz.org/artist/${mbid}`,
+    };
+  });
   return resolved.filter((i): i is NonNullable<typeof i> => i !== null);
 }
 
@@ -324,28 +371,27 @@ export async function getArtistPlayItems(
       profile,
       remaining
     ).map((ranked) => candidates.find((a) => a.id === ranked.id)!);
-    const extra = await Promise.all(
-      artists.map(async (a) => {
-        // Name/disambiguation already came from this search result --
-        // resolveArtistVisual still checks the cache first for the
-        // image (and backfills the cache with this known name if it
-        // has to resolve fresh), so a repeat appearance of this artist
-        // is a cache hit next time regardless of which path found it.
-        const visual = await resolveArtistVisual(a.id, a.name);
-        const imageUrl = visual?.imageUrl ?? null;
-        return {
-          id: a.id,
-          type: "artist" as const,
-          title: a.name,
-          subtitle: a.disambiguation ?? null,
-          imageUrl,
-          source: "musicbrainz",
-          discoverySource: "musicbrainz",
-          imageSource: imageUrl ? "wikimedia" : null,
-          sourceUrl: `https://musicbrainz.org/artist/${a.id}`,
-        };
-      })
-    );
+    // Name/disambiguation already came from this search result --
+    // resolveArtistVisualsBatch still checks the cache first for the
+    // image (one batched read for every artist, not one per artist),
+    // and backfills the cache with this known name on a miss, so a
+    // repeat appearance of this artist is a cache hit next time
+    // regardless of which path found it.
+    const visuals = await resolveArtistVisualsBatch(artists.map((a) => ({ mbid: a.id, knownName: a.name })));
+    const extra = artists.map((a) => {
+      const imageUrl = visuals.get(a.id)?.imageUrl ?? null;
+      return {
+        id: a.id,
+        type: "artist" as const,
+        title: a.name,
+        subtitle: a.disambiguation ?? null,
+        imageUrl,
+        source: "musicbrainz",
+        discoverySource: "musicbrainz",
+        imageSource: imageUrl ? "wikimedia" : null,
+        sourceUrl: `https://musicbrainz.org/artist/${a.id}`,
+      };
+    });
     return { items: [...combined, ...extra], listenBrainzFailed: fromListenBrainz.failed, musicBrainzFailed: false };
   } catch {
     return { items: combined, listenBrainzFailed: fromListenBrainz.failed, musicBrainzFailed: true };
@@ -373,6 +419,16 @@ async function albumsFromListenBrainz(
   // (image-first) -- over-fetching a small multiple of `count` gives
   // the familiarity ranker below something to actually choose between,
   // rather than just taking whatever resolved first.
+  //
+  // Deliberately NOT batched (unlike the two fixed-candidate-list
+  // callers above/below): this loop is adaptive -- it stops as soon as
+  // it has overfetchCap images, so it doesn't know its full candidate
+  // list up front the way a batch read needs. It's also not the
+  // pattern that caused the measured N+1 burst: each iteration is
+  // already sequential (one `await` at a time, not a Promise.all
+  // firing many at once), and album/track pools aren't part of the
+  // choice generator this incident was in (Blind Rank/Keep 3 Drop 2
+  // only). Left as single-item resolution.
   const overfetchCap = count * 3;
   const withImages: PlayItem[] = [];
   const withoutImages: PlayItem[] = [];
@@ -426,6 +482,8 @@ async function anchoredAlbumItems(profile: FamiliarityProfile, count: number, ex
     }
   }
 
+  // Same "adaptive early-break, deliberately not batched" reasoning as
+  // albumsFromListenBrainz above.
   const withImages: PlayItem[] = [];
   for (const rg of shuffle(groups)) {
     if (withImages.length >= count) break;
@@ -481,22 +539,21 @@ export async function getAlbumPlayItems(
       profile,
       remaining
     ).map((ranked) => candidates.find((rg) => rg.id === ranked.id)!);
-    const extra = await Promise.all(
-      groups.map(async (rg) => {
-        const imageUrl = await getReleaseGroupCoverArt(rg.id);
-        return {
-          id: rg.id,
-          type: "album" as const,
-          title: rg.title,
-          subtitle: rg["artist-credit"]?.map((c) => c.name).join(", ") ?? null,
-          imageUrl,
-          source: "musicbrainz",
-          discoverySource: "musicbrainz",
-          imageSource: imageUrl ? "coverartarchive" : null,
-          sourceUrl: `https://musicbrainz.org/release-group/${rg.id}`,
-        };
-      })
-    );
+    const coverArt = await getReleaseGroupCoverArtBatch(groups.map((rg) => rg.id));
+    const extra = groups.map((rg) => {
+      const imageUrl = coverArt.get(rg.id) ?? null;
+      return {
+        id: rg.id,
+        type: "album" as const,
+        title: rg.title,
+        subtitle: rg["artist-credit"]?.map((c) => c.name).join(", ") ?? null,
+        imageUrl,
+        source: "musicbrainz",
+        discoverySource: "musicbrainz",
+        imageSource: imageUrl ? "coverartarchive" : null,
+        sourceUrl: `https://musicbrainz.org/release-group/${rg.id}`,
+      };
+    });
     return { items: [...combined, ...extra], listenBrainzFailed: fromListenBrainz.failed, musicBrainzFailed: false };
   } catch {
     return { items: combined, listenBrainzFailed: fromListenBrainz.failed, musicBrainzFailed: true };
@@ -529,23 +586,23 @@ export async function getTrackPlayItems(
       count
     ).map((ranked) => candidates.find((r) => r.id === ranked.id)!);
 
-    const items = await Promise.all(
-      recordings.map(async (rec) => {
-        const releaseGroupId = rec.releases?.[0]?.["release-group"]?.id;
-        const imageUrl = releaseGroupId ? await getReleaseGroupCoverArt(releaseGroupId) : null;
-        return {
-          id: rec.id,
-          type: "track" as const,
-          title: rec.title,
-          subtitle: rec["artist-credit"]?.map((c) => c.name).join(", ") ?? null,
-          imageUrl,
-          source: "musicbrainz",
-          discoverySource: "musicbrainz",
-          imageSource: imageUrl ? "coverartarchive" : null,
-          sourceUrl: `https://musicbrainz.org/recording/${rec.id}`,
-        };
-      })
-    );
+    const releaseGroupIds = recordings.map((rec) => rec.releases?.[0]?.["release-group"]?.id).filter((id): id is string => !!id);
+    const coverArt = await getReleaseGroupCoverArtBatch(releaseGroupIds);
+    const items = recordings.map((rec) => {
+      const releaseGroupId = rec.releases?.[0]?.["release-group"]?.id;
+      const imageUrl = releaseGroupId ? coverArt.get(releaseGroupId) ?? null : null;
+      return {
+        id: rec.id,
+        type: "track" as const,
+        title: rec.title,
+        subtitle: rec["artist-credit"]?.map((c) => c.name).join(", ") ?? null,
+        imageUrl,
+        source: "musicbrainz",
+        discoverySource: "musicbrainz",
+        imageSource: imageUrl ? "coverartarchive" : null,
+        sourceUrl: `https://musicbrainz.org/recording/${rec.id}`,
+      };
+    });
     return { items, listenBrainzFailed: false, musicBrainzFailed: false };
   } catch {
     return { items: [], listenBrainzFailed: false, musicBrainzFailed: true };
@@ -583,22 +640,21 @@ export async function searchArtistsByTag(tag: string, count: number, exclude: Se
  * pass, shared by every artist-search-shaped caller (Tune search,
  * Tune suggestions-by-tag). */
 async function resolveVisualBatch(candidates: MbArtist[], count: number, discoverySource: string): Promise<PlayItem[]> {
-  const resolved = await Promise.all(
-    candidates.map(async (a) => {
-      const visual = await resolveArtistVisual(a.id, a.name);
-      return {
-        id: a.id,
-        type: "artist" as const,
-        title: visual?.name ?? a.name,
-        subtitle: visual?.disambiguation ?? a.disambiguation ?? null,
-        imageUrl: visual?.imageUrl ?? null,
-        source: "musicbrainz",
-        discoverySource,
-        imageSource: visual?.imageUrl ? "wikimedia" : null,
-        sourceUrl: `https://musicbrainz.org/artist/${a.id}`,
-      };
-    })
-  );
+  const visuals = await resolveArtistVisualsBatch(candidates.map((a) => ({ mbid: a.id, knownName: a.name })));
+  const resolved = candidates.map((a) => {
+    const visual = visuals.get(a.id);
+    return {
+      id: a.id,
+      type: "artist" as const,
+      title: visual?.name ?? a.name,
+      subtitle: visual?.disambiguation ?? a.disambiguation ?? null,
+      imageUrl: visual?.imageUrl ?? null,
+      source: "musicbrainz",
+      discoverySource,
+      imageSource: visual?.imageUrl ? "wikimedia" : null,
+      sourceUrl: `https://musicbrainz.org/artist/${a.id}`,
+    };
+  });
   return resolved.filter((i) => i.imageUrl).slice(0, count);
 }
 
@@ -649,22 +705,21 @@ export async function searchArtists(query: string, count = 8): Promise<PlayItem[
     // this also backs the plain search box, where a user typing an
     // exact name expects to find that artist even if Wikidata happens
     // to have no photo for them, not have it silently disappear.
-    const items = await Promise.all(
-      candidates.map(async (a) => {
-        const visual = await resolveArtistVisual(a.id, a.name);
-        return {
-          id: a.id,
-          type: "artist" as const,
-          title: visual?.name ?? a.name,
-          subtitle: visual?.disambiguation ?? a.disambiguation ?? null,
-          imageUrl: visual?.imageUrl ?? null,
-          source: "musicbrainz",
-          discoverySource: "musicbrainz",
-          imageSource: visual?.imageUrl ? "wikimedia" : null,
-          sourceUrl: `https://musicbrainz.org/artist/${a.id}`,
-        };
-      })
-    );
+    const visuals = await resolveArtistVisualsBatch(candidates.map((a) => ({ mbid: a.id, knownName: a.name })));
+    const items = candidates.map((a) => {
+      const visual = visuals.get(a.id);
+      return {
+        id: a.id,
+        type: "artist" as const,
+        title: visual?.name ?? a.name,
+        subtitle: visual?.disambiguation ?? a.disambiguation ?? null,
+        imageUrl: visual?.imageUrl ?? null,
+        source: "musicbrainz",
+        discoverySource: "musicbrainz",
+        imageSource: visual?.imageUrl ? "wikimedia" : null,
+        sourceUrl: `https://musicbrainz.org/artist/${a.id}`,
+      };
+    });
     return items;
   } catch {
     return [];

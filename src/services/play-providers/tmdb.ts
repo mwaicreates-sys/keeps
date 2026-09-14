@@ -1,5 +1,5 @@
 import { tmdbGet, tmdbImageUrl, tmdbSourceUrl, TmdbHttpError, TmdbConfigError } from "@/lib/tmdb/client";
-import { getCachedContentItem, setCachedContentItem } from "@/services/play-providers/content-cache";
+import { getCachedContentItemsBatch, setCachedContentItemsBatch } from "@/services/play-providers/content-cache";
 import { rankByFamiliarity, type FamiliarityProfile } from "@/services/play-providers/familiarity";
 import type { PlayItem } from "@/services/play-providers/types";
 
@@ -84,50 +84,74 @@ type TmdbMovie = { id: number; title: string; poster_path: string | null; releas
 type TmdbTv = { id: number; name: string; poster_path: string | null; first_air_date?: string; vote_count: number; vote_average: number };
 type TmdbPerson = { id: number; name: string; profile_path: string | null; known_for_department?: string; popularity: number };
 
-/** The one place every movie/tv/person id gets turned into a real
- * PlayItem -- checks the persistent cache first (see
- * content-cache.ts), only ever calling this function's own resolution
- * logic on a miss, and writes the result back so a repeat appearance
- * of this title/person is a fast DB read next time, not a TMDb call. */
-async function resolveVisual(
+type ResolveFallback = { title: string; subtitle: string | null; imagePath: string | null; metadata: Record<string, unknown> };
+
+/**
+ * The batch entry point every movie/tv/person pool builder uses: ONE
+ * play_content_cache read for every candidate id (not one per id --
+ * this used to be a Promise.all of individually-cached resolveVisual
+ * calls, which is exactly the N+1 the daily-run pool increase exposed
+ * in production), then ONE batched write for whatever was a genuine
+ * miss. A miss needs no extra TMDb call at all: the discover/popular
+ * response already in hand carries the title/poster path, so resolving
+ * a miss is pure local computation -- the only thing this was ever
+ * saving on a hit was the Supabase round trip itself.
+ */
+async function resolveVisualsBatch(
   itemType: "movie" | "tv" | "person",
-  id: number,
-  fallback: { title: string; subtitle: string | null; imagePath: string | null; metadata: Record<string, unknown> }
-): Promise<PlayItem | null> {
-  const idStr = String(id);
-  const cached = await getCachedContentItem(itemType, idStr);
-  if (cached) {
-    if (!cached.imageUrl) return null; // cached "no usable image" -- replace this candidate, never render it
-    return {
+  items: { id: number; fallback: ResolveFallback }[]
+): Promise<Map<number, PlayItem | null>> {
+  const result = new Map<number, PlayItem | null>();
+  if (items.length === 0) return result;
+
+  const idStrs = items.map((i) => String(i.id));
+  const cacheStart = Date.now();
+  const cached = await getCachedContentItemsBatch(itemType, idStrs);
+  console.log(
+    "[perf]",
+    JSON.stringify({ label: "tmdb_visual_batch", itemType, requested: items.length, cacheHits: cached.size, cacheMisses: items.length - cached.size, cacheReadMs: Date.now() - cacheStart })
+  );
+
+  const toWrite: { itemId: string; item: { title: string | null; subtitle: string | null; imageUrl: string | null; metadata: Record<string, unknown> } }[] = [];
+  for (const { id, fallback } of items) {
+    const idStr = String(id);
+    const hit = cached.get(idStr);
+    if (hit) {
+      // cached "no usable image" -- replace this candidate, never render it
+      result.set(id, !hit.imageUrl ? null : {
+        id: idStr,
+        type: itemType,
+        title: hit.title ?? fallback.title,
+        subtitle: hit.subtitle,
+        imageUrl: hit.imageUrl,
+        source: "tmdb",
+        discoverySource: "tmdb",
+        imageSource: "tmdb",
+        sourceUrl: tmdbSourceUrl(itemType, id),
+        metadata: hit.metadata,
+      });
+      continue;
+    }
+
+    const imageUrl = fallback.imagePath ? tmdbImageUrl(fallback.imagePath, itemType === "person" ? PROFILE_SIZE : POSTER_SIZE) : null;
+    toWrite.push({ itemId: idStr, item: { title: fallback.title, subtitle: fallback.subtitle, imageUrl, metadata: fallback.metadata } });
+    // no usable image -- caller replaces this candidate rather than showing a naked card
+    result.set(id, !imageUrl ? null : {
       id: idStr,
       type: itemType,
-      title: cached.title ?? fallback.title,
-      subtitle: cached.subtitle,
-      imageUrl: cached.imageUrl,
+      title: fallback.title,
+      subtitle: fallback.subtitle,
+      imageUrl,
       source: "tmdb",
       discoverySource: "tmdb",
       imageSource: "tmdb",
       sourceUrl: tmdbSourceUrl(itemType, id),
-      metadata: cached.metadata,
-    };
+      metadata: fallback.metadata,
+    });
   }
 
-  const imageUrl = fallback.imagePath ? tmdbImageUrl(fallback.imagePath, itemType === "person" ? PROFILE_SIZE : POSTER_SIZE) : null;
-  await setCachedContentItem(itemType, idStr, { title: fallback.title, subtitle: fallback.subtitle, imageUrl, metadata: fallback.metadata });
-  if (!imageUrl) return null; // no usable image -- caller replaces this candidate rather than showing a naked card
-
-  return {
-    id: idStr,
-    type: itemType,
-    title: fallback.title,
-    subtitle: fallback.subtitle,
-    imageUrl,
-    source: "tmdb",
-    discoverySource: "tmdb",
-    imageSource: "tmdb",
-    sourceUrl: tmdbSourceUrl(itemType, id),
-    metadata: fallback.metadata,
-  };
+  if (toWrite.length > 0) await setCachedContentItemsBatch(itemType, toWrite);
+  return result;
 }
 
 export async function getMoviePlayItems(count: number, exclude: Set<string> = new Set(), profile: FamiliarityProfile = NO_PROFILE): Promise<MovieFetchResult> {
@@ -168,16 +192,19 @@ export async function getMoviePlayItems(count: number, exclude: Set<string> = ne
       Math.min(candidates.length, count + 4)
     ).map((r) => candidates.find((c) => String(c.id) === r.id)!);
 
-    const resolved = await Promise.all(
-      ranked.map((m) =>
-        resolveVisual("movie", m.id, {
+    const visuals = await resolveVisualsBatch(
+      "movie",
+      ranked.map((m) => ({
+        id: m.id,
+        fallback: {
           title: m.title,
           subtitle: m.release_date?.slice(0, 4) ?? null,
           imagePath: m.poster_path,
           metadata: { posterPath: m.poster_path, releaseDate: m.release_date ?? null, voteAverage: m.vote_average },
-        })
-      )
+        },
+      }))
     );
+    const resolved = ranked.map((m) => visuals.get(m.id) ?? null);
     const items = resolved.filter((i): i is PlayItem => i !== null).slice(0, count);
     const rejectedForNoImage = rejectedForNoImageAtSource + (resolved.length - items.length);
     return { items, failed: false, diagnostics: { httpStatus: 200, candidateCount: rawCount, rejectedForNoImage, rejectedForRecognizability: 0 } };
@@ -215,16 +242,19 @@ export async function getTvPlayItems(count: number, exclude: Set<string> = new S
       Math.min(candidates.length, count + 4)
     ).map((r) => candidates.find((c) => String(c.id) === r.id)!);
 
-    const resolved = await Promise.all(
-      ranked.map((t) =>
-        resolveVisual("tv", t.id, {
+    const visuals = await resolveVisualsBatch(
+      "tv",
+      ranked.map((t) => ({
+        id: t.id,
+        fallback: {
           title: t.name,
           subtitle: t.first_air_date?.slice(0, 4) ?? null,
           imagePath: t.poster_path,
           metadata: { posterPath: t.poster_path, firstAirDate: t.first_air_date ?? null, voteAverage: t.vote_average },
-        })
-      )
+        },
+      }))
     );
+    const resolved = ranked.map((t) => visuals.get(t.id) ?? null);
     const items = resolved.filter((i): i is PlayItem => i !== null).slice(0, count);
     const rejectedForNoImage = rejectedForNoImageAtSource + (resolved.length - items.length);
     return { items, failed: false, diagnostics: { httpStatus: 200, candidateCount: rawCount, rejectedForNoImage, rejectedForRecognizability: 0 } };
@@ -263,16 +293,14 @@ export async function getPersonPlayItems(count: number, exclude: Set<string> = n
       Math.min(candidates.length, count + 4)
     ).map((r) => candidates.find((c) => String(c.id) === r.id)!);
 
-    const resolved = await Promise.all(
-      ranked.map((p) =>
-        resolveVisual("person", p.id, {
-          title: p.name,
-          subtitle: "Actor",
-          imagePath: p.profile_path,
-          metadata: { profilePath: p.profile_path },
-        })
-      )
+    const visuals = await resolveVisualsBatch(
+      "person",
+      ranked.map((p) => ({
+        id: p.id,
+        fallback: { title: p.name, subtitle: "Actor", imagePath: p.profile_path, metadata: { profilePath: p.profile_path } },
+      }))
     );
+    const resolved = ranked.map((p) => visuals.get(p.id) ?? null);
     const items = resolved.filter((i): i is PlayItem => i !== null).slice(0, count);
     const rejectedForNoImage = rejectedForNoImageAtSource + (resolved.length - items.length);
     return { items, failed: false, diagnostics: { httpStatus: 200, candidateCount: rawCount, rejectedForNoImage, rejectedForRecognizability } };

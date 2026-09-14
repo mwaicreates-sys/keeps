@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { resolveTimeZone, localDateString } from "@/lib/timezone";
-import { generateChoiceQuestion, generateBlindRankQuestion, generateKeepDropQuestion } from "@/lib/run-content-generator";
+import { generateChoiceQuestions, generateBlindRankQuestion, generateKeepDropQuestion } from "@/lib/run-content-generator";
 import { pickTop5Prompt } from "@/lib/top5-prompt";
 import { sourceForKind } from "@/lib/play-content-categories";
 import { requiredAnswerCount, RUN_GAME_TYPES, type RunGameType } from "@/lib/game-run-types";
@@ -75,27 +75,18 @@ export async function getRunAnswer(runId: string, userId: string): Promise<GameR
  * opinion rounds" rule, a question that can't be made visual is
  * skipped, not downgraded to a beige text card.
  *
- * Returns null when literally nothing visual could be generated at
- * all (every kind failed) -- getOrCreateTodayRun does not save a run
- * in that case, so a transient provider outage never gets "cached" as
- * today's permanent (bad) run; the next request just tries again. */
+ * Returns null when a full valid set couldn't be generated -- EXACTLY
+ * 5 real visual questions or no run at all, never a partial "2 of 5."
+ * getOrCreateTodayRun does not save a run in that case, so a
+ * transient provider outage never gets "cached" as today's permanent
+ * (bad) run; the next request just tries generation again. */
 async function generateQuestions(gameType: RunGameType, spaceId: string): Promise<{ questions: unknown[]; topic: string; category: string } | null> {
   if (gameType === "this_or_that" || gameType === "guess_mine") {
-    const questions: ChoicePrompt[] = [];
-    const usedIds: string[] = [];
-    // Each attempt already tries every visual kind internally (see
-    // run-content-generator.ts) -- up to 5 attempts for 5 slots, no
-    // extra retries per slot, since a slot that failed against every
-    // kind once isn't going to succeed against the same kinds again a
-    // moment later. A short run (fewer than 5) is an accepted, visible
-    // degradation; a fully-abandoned run (0 questions) is not saved.
-    for (let i = 0; i < 5; i++) {
-      const q = await generateChoiceQuestion(gameType, spaceId, usedIds);
-      if (!q) continue;
-      questions.push(q);
-      if (q.items) usedIds.push(...q.items.map((it) => it.id));
-    }
-    if (questions.length === 0) return null;
+    // generateChoiceQuestions owns its own bounded retries, per-kind
+    // pool cache, and cross-slot duplicate prevention -- it returns
+    // either exactly 5 real questions or null, never anything shorter.
+    const questions = await generateChoiceQuestions(gameType, spaceId);
+    if (!questions) return null;
     return { questions, topic: "Today's 5", category: questions[0].category };
   }
   if (gameType === "blind_rank") {
@@ -161,7 +152,26 @@ function summarizeGeneratedQuestions(gameType: RunGameType, questions: unknown[]
  */
 export async function getOrCreateTodayRun(spaceId: string, gameType: RunGameType): Promise<GameRunRow | null> {
   const runDate = await getTodayRunDateForSpace(spaceId);
-  const existing = await getExistingRun(spaceId, gameType, runDate);
+  let existing = await getExistingRun(spaceId, gameType, runDate);
+  if (existing) {
+    // Guards against a run saved by an earlier, buggier deploy (or any
+    // other cause) with fewer than the required number of questions --
+    // "EXACTLY 5 or no run" applies to what's persisted, not just to
+    // new generation. Only discard and regenerate if nobody has
+    // touched it yet: once a player has an answer row (even an
+    // in-progress one), their progress is only meaningful against the
+    // exact item set they were shown, so a short-but-answered run is
+    // left alone as legacy rather than mutated destructively.
+    if ((gameType === "this_or_that" || gameType === "guess_mine") && (existing.questions as unknown[]).length < 5) {
+      const supabase = await createClient();
+      const { count } = await supabase.from("game_run_answers").select("id", { count: "exact", head: true }).eq("run_id", existing.id);
+      if (!count) {
+        console.log("[play/daily-run]", JSON.stringify({ runId: existing.id, spaceId, gameType, runDate, outcome: "discarding_partial_unanswered_run" }));
+        await supabase.from("game_runs").delete().eq("id", existing.id);
+        existing = null;
+      }
+    }
+  }
   if (existing) return existing;
 
   const genStart = Date.now();

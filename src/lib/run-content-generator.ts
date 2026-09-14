@@ -15,6 +15,7 @@ import {
   TOPIC_BY_KIND as KEEP_DROP_TOPIC_BY_KIND,
   type KeepDropPrompt,
 } from "@/lib/keep-drop-prompt";
+import type { PlayPool } from "@/services/play-providers/types";
 
 /**
  * Server-only daily-run content generation.
@@ -34,15 +35,22 @@ import {
  * short, every generator here tries EVERY visual kind available to
  * that game type (shuffled, so it's not always the same order) before
  * giving up. Only once every visual kind has failed does it return
- * null, and the caller (game-runs-server.ts) skips that slot rather
- * than inserting a naked text card.
+ * null.
+ *
+ * EXACTLY 5 OR NO RUN (This or That / Guess Mine): generateChoiceQuestions
+ * below is the one place that owns the whole 5-question daily set --
+ * bounded total attempts (never hammering providers indefinitely), a
+ * per-kind pool cache reused across retries (so a retry that picks the
+ * same kind again doesn't re-query the provider), and duplicate
+ * prevention across all 5 slots. It returns either all 5 real
+ * questions or null -- there is no partial-run return value for
+ * game-runs-server.ts to accidentally persist.
  *
  * Sources pools via content-pool-server.ts's direct, in-process
  * resolveContentPool rather than choice-prompt.ts/blind-rank-
  * prompt.ts/keep-drop-prompt.ts's client-side fetch("/api/play/...")
- * calls, which have no meaning on the server (see the earlier fix in
- * this file's history) -- this generator is what makes today's run
- * actually reach MusicBrainz/TMDb.
+ * calls, which have no meaning on the server -- this generator is what
+ * makes today's run actually reach MusicBrainz/TMDb.
  */
 
 function shuffle<T>(arr: readonly T[]): T[] {
@@ -67,22 +75,47 @@ function logKindAttempt(entry: {
   console.log("[play/daily-run-question]", JSON.stringify(entry));
 }
 
-export async function generateChoiceQuestion(
+/**
+ * A per-generation cache of each content kind's pool, fetched once at
+ * a generous size and reused across every retry that happens to pick
+ * the same kind again -- "reuse cached pools during retries, don't
+ * hammer providers." Cached ignoring per-call exclude ids (duplicate
+ * prevention within the run is applied by filtering the cached list
+ * locally instead), so a second attempt at the same kind is a
+ * zero-network-call local filter, not another provider round trip.
+ */
+type PoolCache = Map<ContentKind, PlayPool>;
+
+async function getCachedPool(cache: PoolCache, kind: ContentKind, minCount: number, spaceId: string): Promise<PlayPool> {
+  const cached = cache.get(kind);
+  if (cached) return cached;
+  const fetched = await resolveContentPool(kind, Math.max(minCount, 15), spaceId);
+  cache.set(kind, fetched);
+  return fetched;
+}
+
+/** One attempt at one This or That/Guess Mine question, trying every
+ * visual kind (shuffled) via the shared pool cache before giving up.
+ * `excludeIds` is every item id already used elsewhere in today's set,
+ * so this can never produce a duplicate matchup/item. */
+async function attemptChoiceQuestion(
   gameType: "this_or_that" | "guess_mine",
   spaceId: string,
-  excludeIds: string[]
+  excludeIds: Set<string>,
+  cache: PoolCache
 ): Promise<ChoicePrompt | null> {
   for (const kind of shuffle(CHOICE_KINDS)) {
     const start = Date.now();
-    const pool = await resolveContentPool(kind, CHOICE_POOL_SIZE, spaceId, excludeIds);
-    const withImages = pool.items.filter((i) => i.imageUrl);
+    const pool = await getCachedPool(cache, kind, CHOICE_POOL_SIZE, spaceId);
+    const available = pool.items.filter((i) => !excludeIds.has(i.id));
+    const withImages = available.filter((i) => i.imageUrl);
     const accepted = withImages.length >= 2;
     logKindAttempt({
       gameType,
       kind,
       requestedCount: CHOICE_POOL_SIZE,
       poolProvider: pool.provider,
-      candidateCount: pool.items.length,
+      candidateCount: available.length,
       withImagesCount: withImages.length,
       accepted,
       durationMs: Date.now() - start,
@@ -100,7 +133,39 @@ export async function generateChoiceQuestion(
       kind,
     };
   }
-  return null; // every visual kind failed -- caller skips this slot, never a text fallback
+  return null; // every visual kind failed for this attempt
+}
+
+/** Bounded attempts across all 5 slots combined -- generous enough to
+ * absorb a few unlucky slots (provider randomization means a retry can
+ * genuinely succeed where the last one didn't), but never unbounded.
+ * 3x the minimum needed (5) leaves real headroom without hammering. */
+const MAX_TOTAL_CHOICE_ATTEMPTS = 15;
+
+/**
+ * The daily five for This or That/Guess Mine -- EXACTLY 5 real visual
+ * questions, or null. Never returns a partial list: game-runs-
+ * server.ts has nothing to accidentally persist as "2 of 5."
+ */
+export async function generateChoiceQuestions(gameType: "this_or_that" | "guess_mine", spaceId: string): Promise<ChoicePrompt[] | null> {
+  const cache: PoolCache = new Map();
+  const usedIds = new Set<string>();
+  const questions: ChoicePrompt[] = [];
+  let attempts = 0;
+
+  while (questions.length < 5 && attempts < MAX_TOTAL_CHOICE_ATTEMPTS) {
+    attempts++;
+    const q = await attemptChoiceQuestion(gameType, spaceId, usedIds, cache);
+    if (!q) continue;
+    questions.push(q);
+    for (const item of q.items ?? []) usedIds.add(item.id);
+  }
+
+  if (questions.length < 5) {
+    console.log("[play/daily-run]", JSON.stringify({ gameType, outcome: "insufficient_visual_questions", attempts, produced: questions.length }));
+    return null;
+  }
+  return questions;
 }
 
 export async function generateBlindRankQuestion(spaceId: string): Promise<{ prompt: BlindRankPrompt; topic: string } | null> {
@@ -181,4 +246,18 @@ export async function generateSwapReplacement(kind: ContentKind, spaceId: string
   const pool = await resolveContentPool(kind, 4, spaceId, excludeIds);
   const withImage = pool.items.find((i) => i.imageUrl);
   return withImage ? { title: withImage.title, id: withImage.id, imageUrl: withImage.imageUrl! } : null;
+}
+
+/** Regenerates a single whole pair for the run-swap route -- same
+ * bounded, cache-free (a swap is a one-off, not a retry loop) attempt
+ * across every visual kind, excluding every id already used elsewhere
+ * in today's set. Exported separately from generateChoiceQuestions
+ * since a swap only ever needs one replacement question, not a fresh
+ * full five. */
+export async function generateReplacementChoiceQuestion(
+  gameType: "this_or_that" | "guess_mine",
+  spaceId: string,
+  excludeIds: string[]
+): Promise<ChoicePrompt | null> {
+  return attemptChoiceQuestion(gameType, spaceId, new Set(excludeIds), new Map());
 }

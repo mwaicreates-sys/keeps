@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { getRunAnswer } from "@/services/game-runs-server";
-import { generateChoiceQuestion, generateSwapReplacement } from "@/lib/run-content-generator";
+import { generateReplacementChoiceQuestion, generateSwapReplacement } from "@/lib/run-content-generator";
 import { isRunGameType } from "@/lib/game-run-types";
 import { sourceForKind } from "@/lib/play-content-categories";
 import { weightForSignal } from "@/services/play-providers/familiarity";
@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
     } else {
       // No valid single replacement -- regenerate the whole pair
       // instead of leaving (or forcing) an invalid matchup.
-      const regeneratedQuestion = await generateChoiceQuestion(run.game_type, run.space_id, usedIdsElsewhere);
+      const regeneratedQuestion = await generateReplacementChoiceQuestion(run.game_type, run.space_id, usedIdsElsewhere);
       if (!regeneratedQuestion) {
         // No visual kind could produce a replacement pair at all right
         // now -- refuse the swap rather than ever writing a text-only

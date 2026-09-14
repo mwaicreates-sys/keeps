@@ -69,32 +69,48 @@ export async function getRunAnswer(runId: string, userId: string): Promise<GameR
  * blind-rank-prompt.ts/keep-drop-prompt.ts directly -- those pick
  * content via a client-side fetch() that has no meaning on the server
  * (see run-content-generator.ts's own docs). This is still the exact
- * same provider engine (MusicBrainz/TMDb via content-pool-server.ts),
- * the exact same overfetch-and-require-images validation, and the
- * exact same hardcoded-pack last resort -- just invoked in a way that
- * actually runs on the server instead of silently no-op'ing. */
-async function generateQuestions(gameType: RunGameType, spaceId: string): Promise<{ questions: unknown[]; topic: string; category: string }> {
+ * same provider engine (MusicBrainz/TMDb via content-pool-server.ts)
+ * and the exact same overfetch-and-require-images validation -- but
+ * NEVER the hardcoded-pack text fallback: per the "no text-only
+ * opinion rounds" rule, a question that can't be made visual is
+ * skipped, not downgraded to a beige text card.
+ *
+ * Returns null when literally nothing visual could be generated at
+ * all (every kind failed) -- getOrCreateTodayRun does not save a run
+ * in that case, so a transient provider outage never gets "cached" as
+ * today's permanent (bad) run; the next request just tries again. */
+async function generateQuestions(gameType: RunGameType, spaceId: string): Promise<{ questions: unknown[]; topic: string; category: string } | null> {
   if (gameType === "this_or_that" || gameType === "guess_mine") {
     const questions: ChoicePrompt[] = [];
     const usedIds: string[] = [];
+    // Each attempt already tries every visual kind internally (see
+    // run-content-generator.ts) -- up to 5 attempts for 5 slots, no
+    // extra retries per slot, since a slot that failed against every
+    // kind once isn't going to succeed against the same kinds again a
+    // moment later. A short run (fewer than 5) is an accepted, visible
+    // degradation; a fully-abandoned run (0 questions) is not saved.
     for (let i = 0; i < 5; i++) {
       const q = await generateChoiceQuestion(gameType, spaceId, usedIds);
+      if (!q) continue;
       questions.push(q);
       if (q.items) usedIds.push(...q.items.map((it) => it.id));
     }
-    return { questions, topic: "Today's 5", category: questions[0]?.category ?? "Mixed" };
+    if (questions.length === 0) return null;
+    return { questions, topic: "Today's 5", category: questions[0].category };
   }
   if (gameType === "blind_rank") {
-    const { prompt, topic } = await generateBlindRankQuestion(spaceId);
-    return { questions: [prompt], topic, category: prompt.category };
+    const generated = await generateBlindRankQuestion(spaceId);
+    if (!generated) return null;
+    return { questions: [generated.prompt], topic: generated.topic, category: generated.prompt.category };
   }
   if (gameType === "keep3_drop2") {
-    const { prompt, topic } = await generateKeepDropQuestion(spaceId);
-    return { questions: [prompt], topic, category: prompt.category };
+    const generated = await generateKeepDropQuestion(spaceId);
+    if (!generated) return null;
+    return { questions: [generated.prompt], topic: generated.topic, category: generated.prompt.category };
   }
   // top5 -- a plain random topic from the hardcoded pack, no provider
-  // involved at all (unchanged from before; there's nothing here that
-  // could have hit the same server/client bug).
+  // involved and no visual requirement (it's a free-text ranked list,
+  // not an opinion-card round the "no text-only" rule targets).
   const p = await pickTop5Prompt();
   return { questions: [p], topic: p.topic, category: p.category };
 }
@@ -135,14 +151,27 @@ function summarizeGeneratedQuestions(gameType: RunGameType, questions: unknown[]
  * duplicate -- so both players always end up answering the exact same
  * questions, never independently-generated ones.
  */
-export async function getOrCreateTodayRun(spaceId: string, gameType: RunGameType): Promise<GameRunRow> {
+/**
+ * Returns null (never a partially-broken row) when no visual content
+ * could be generated at all today -- this is a full outage of every
+ * visual kind for this game type, rare enough that it isn't worth
+ * caching a bad result: the next request just tries generation again
+ * from scratch instead of being stuck with today's failure until
+ * midnight.
+ */
+export async function getOrCreateTodayRun(spaceId: string, gameType: RunGameType): Promise<GameRunRow | null> {
   const runDate = await getTodayRunDateForSpace(spaceId);
   const existing = await getExistingRun(spaceId, gameType, runDate);
   if (existing) return existing;
 
   const genStart = Date.now();
-  const { questions, topic, category } = await generateQuestions(gameType, spaceId);
+  const generated = await generateQuestions(gameType, spaceId);
   const generationMs = Date.now() - genStart;
+  if (!generated) {
+    console.log("[play/daily-run]", JSON.stringify({ spaceId, gameType, runDate, generationMs, outcome: "no_visual_content_available" }));
+    return null;
+  }
+  const { questions, topic, category } = generated;
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("game_runs")
@@ -226,7 +255,7 @@ export async function getCompletedRunGameTypesToday(spaceId: string, userId: str
 export { requiredAnswerCount };
 
 export type RunStartPayload = {
-  run: GameRunRow;
+  run: GameRunRow | null;
   mine: GameRunAnswerRow | null;
   requiredAnswerCount: number;
   partner: { id: string; display_name: string } | null;
@@ -236,7 +265,11 @@ export type RunStartPayload = {
 
 /** Shared by the server-rendered page (first load -- no client round
  * trip needed) and /api/play/run/start (used for any client-side
- * re-check) so both compute today's-run state identically. */
+ * re-check) so both compute today's-run state identically.
+ *
+ * `run` is null only when no visual content could be generated at all
+ * today (every provider/kind failed) -- the page renders an honest
+ * "not available right now" state rather than a text-only round. */
 export async function buildRunStartPayload(spaceId: string, gameType: RunGameType, userId: string): Promise<RunStartPayload> {
   const supabase = await createClient();
   const [{ data: membership }, run] = await Promise.all([
@@ -247,12 +280,16 @@ export async function buildRunStartPayload(spaceId: string, gameType: RunGameTyp
   const partner =
     (membership ?? []).map((m) => m.profiles as unknown as { id: string; display_name: string } | null).find((p) => p && p.id !== userId) ?? null;
 
+  const required = requiredAnswerCount(gameType);
+  if (!run) {
+    return { run: null, mine: null, requiredAnswerCount: required, partner, theirsCompleted: false, result: null };
+  }
+
   const [mine, theirs] = await Promise.all([
     getRunAnswer(run.id, userId),
     partner ? getRunAnswer(run.id, partner.id) : Promise.resolve(null),
   ]);
 
-  const required = requiredAnswerCount(gameType);
   const bothComplete = !!mine?.completed_at && !!theirs?.completed_at;
   const result = bothComplete ? computeRunResult(gameType, (mine!.answers as unknown[]) ?? [], (theirs!.answers as unknown[]) ?? []) : null;
 

@@ -9,6 +9,7 @@ import { playGame } from "@/lib/play-config";
 import { RoundHeader } from "@/components/play/RoundHeader";
 import { RoundTagline } from "@/components/play/RoundTagline";
 import { RunWaitingForPartner } from "@/components/play/RunWaitingForPartner";
+import { RunUnavailable } from "@/components/play/RunUnavailable";
 import { getErrorMessage } from "@/lib/utils";
 import type { KeepDropPrompt } from "@/lib/keep-drop-prompt";
 import type { RunResult } from "@/lib/game-run-result";
@@ -16,10 +17,21 @@ import type { RunStartResponse } from "@/services/game-runs-client";
 
 const game = playGame("keep3-drop2");
 
+type NonNullRunStartResponse = RunStartResponse & { run: NonNullable<RunStartResponse["run"]> };
+
 /** Today's Keep 3, Drop 2 run -- a single keep-3-of-5 action (already
  * one submission per round before this change; the daily-run model
- * just makes it the whole day's run instead of up to 5 per day). */
+ * just makes it the whole day's run instead of up to 5 per day).
+ *
+ * `initial.run` is null only when no visual kind could produce a full
+ * 5-item set today -- shown as RunUnavailable (never a plain-text row
+ * list of e.g. movie genres). */
 export function KeepDropRunScreen({ initial }: { initial: RunStartResponse }) {
+  if (!initial.run) return <RunUnavailable icon={game.icon} bg={game.bg} iconColor={game.iconColor} label={game.label} />;
+  return <KeepDropRunScreenInner initial={initial as NonNullRunStartResponse} />;
+}
+
+function KeepDropRunScreenInner({ initial }: { initial: NonNullRunStartResponse }) {
   const { show } = useToast();
 
   // Held in state (not derived directly from `initial`) because a swap

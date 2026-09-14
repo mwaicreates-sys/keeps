@@ -7,13 +7,17 @@ import { submitRunAnswer, swapRunItem, StaleRunError } from "@/services/game-run
 import { playGame } from "@/lib/play-config";
 import { RoundHeader } from "@/components/play/RoundHeader";
 import { RoundTagline } from "@/components/play/RoundTagline";
+import { isMusicKind } from "@/lib/play-content-categories";
 import { RunWaitingForPartner } from "@/components/play/RunWaitingForPartner";
+import { RunUnavailable } from "@/components/play/RunUnavailable";
 import { getErrorMessage } from "@/lib/utils";
 import type { BlindRankPrompt } from "@/lib/blind-rank-prompt";
 import type { RunResult } from "@/lib/game-run-result";
 import type { RunStartResponse } from "@/services/game-runs-client";
 
 const game = playGame("blind-rank");
+
+type NonNullRunStartResponse = RunStartResponse & { run: NonNullable<RunStartResponse["run"]> };
 
 /**
  * Today's Blind Rank run -- a single 5-item ranking action (unlike
@@ -23,8 +27,17 @@ const game = playGame("blind-rank");
  * ranking rounds per day). Submits once, then either shows the
  * comparison immediately (partner already finished today) or sends the
  * player back to Play with a "results when they finish" notice.
+ *
+ * `initial.run` is null only when no visual kind could produce a full
+ * 5-item set today -- shown as RunUnavailable (never a text-only
+ * ranking list).
  */
 export function BlindRankRunScreen({ initial }: { initial: RunStartResponse }) {
+  if (!initial.run) return <RunUnavailable icon={game.icon} bg={game.bg} iconColor={game.iconColor} label={game.label} />;
+  return <BlindRankRunScreenInner initial={initial as NonNullRunStartResponse} />;
+}
+
+function BlindRankRunScreenInner({ initial }: { initial: NonNullRunStartResponse }) {
   const { show } = useToast();
 
   // Held in state (not derived directly from `initial`) because a swap
@@ -127,7 +140,7 @@ export function BlindRankRunScreen({ initial }: { initial: RunStartResponse }) {
               })}
             </div>
           </div>
-          {game.tagline && game.taglineIcon && <RoundTagline text={game.tagline} icon={game.taglineIcon} />}
+          {game.tagline && game.taglineIcon && prompt.kind && isMusicKind(prompt.kind) && <RoundTagline text={game.tagline} icon={game.taglineIcon} />}
         </div>
       );
     }
@@ -201,7 +214,7 @@ export function BlindRankRunScreen({ initial }: { initial: RunStartResponse }) {
           {submitting ? "Submitting…" : "Lock it in"}
         </button>
       </div>
-      {game.tagline && game.taglineIcon && <RoundTagline text={game.tagline} icon={game.taglineIcon} />}
+      {game.tagline && game.taglineIcon && prompt.kind && isMusicKind(prompt.kind) && <RoundTagline text={game.tagline} icon={game.taglineIcon} />}
     </div>
   );
 }

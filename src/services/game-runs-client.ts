@@ -5,6 +5,8 @@ import type { RunResult } from "@/lib/game-run-result";
 import type { Json } from "@/lib/types";
 
 export type RunStartResponse = {
+  // null only when no visual content could be generated at all today
+  // (every provider/kind failed) -- the run screen shows RunUnavailable.
   run: {
     id: string;
     game_type: string;
@@ -13,7 +15,7 @@ export type RunStartResponse = {
     category: string | null;
     questions: Json;
     questions_version: number;
-  };
+  } | null;
   mine: { id: string; answers: Json; completed_at: string | null } | null;
   requiredAnswerCount: number;
   partner: { id: string; display_name: string } | null;

@@ -5,16 +5,19 @@ import { HelpCircle } from "lucide-react";
 import { useSession } from "@/components/SessionProvider";
 import { useToast } from "@/components/Toast";
 import { submitRunAnswer, swapRunItem, StaleRunError } from "@/services/game-runs-client";
-import { sourceForKind } from "@/lib/play-content-categories";
+import { sourceForKind, isMusicKind } from "@/lib/play-content-categories";
 import { recordPlaySignal } from "@/services/play-signals-client";
 import { playGame } from "@/lib/play-config";
 import { RoundHeader } from "@/components/play/RoundHeader";
 import { RoundTagline } from "@/components/play/RoundTagline";
 import { RunWaitingForPartner } from "@/components/play/RunWaitingForPartner";
+import { RunUnavailable } from "@/components/play/RunUnavailable";
 import { getErrorMessage } from "@/lib/utils";
 import type { ChoicePrompt } from "@/lib/choice-prompt";
 import type { RunResult } from "@/lib/game-run-result";
 import type { RunStartResponse } from "@/services/game-runs-client";
+
+type NonNullRunStartResponse = RunStartResponse & { run: NonNullable<RunStartResponse["run"]> };
 
 /**
  * The daily continuous-run screen for This or That / Guess Mine --
@@ -29,8 +32,20 @@ import type { RunStartResponse } from "@/services/game-runs-client";
  * finished today's run too, the comparison shows immediately; otherwise
  * this player is sent back to Play with "results when they finish" --
  * never blocked waiting mid-run.
+ *
+ * `initial.run` is null only when no visual content could be generated
+ * at all today -- shown as RunUnavailable instead (never a text-only
+ * round). Split into a thin wrapper + inner component (rather than an
+ * early return before hooks) so the inner component can assume a
+ * non-null run throughout.
  */
 export function ChoiceRunScreen({ gameType, slug, initial }: { gameType: "this_or_that" | "guess_mine"; slug: string; initial: RunStartResponse }) {
+  const game = playGame(slug);
+  if (!initial.run) return <RunUnavailable icon={game.icon} bg={game.bg} iconColor={game.iconColor} label={game.label} />;
+  return <ChoiceRunScreenInner gameType={gameType} slug={slug} initial={initial as NonNullRunStartResponse} />;
+}
+
+function ChoiceRunScreenInner({ gameType, slug, initial }: { gameType: "this_or_that" | "guess_mine"; slug: string; initial: NonNullRunStartResponse }) {
   const { space } = useSession();
   const { show } = useToast();
   const game = playGame(slug);
@@ -150,7 +165,12 @@ export function ChoiceRunScreen({ gameType, slug, initial }: { gameType: "this_o
               </div>
             </div>
           )}
-          {game.tagline && game.taglineIcon && <RoundTagline text={game.tagline} icon={game.taglineIcon} />}
+          {/* This or That's music-specific tagline is skipped here --
+              a completed run's 5 questions can mix kinds, so a single
+              "Music hits different together" caption would be wrong
+              for whichever aren't music. Guess Mine's generic tagline
+              applies regardless of kind, so it still shows. */}
+          {gameType === "guess_mine" && game.tagline && game.taglineIcon && <RoundTagline text={game.tagline} icon={game.taglineIcon} />}
         </div>
       );
     }
@@ -251,7 +271,16 @@ export function ChoiceRunScreen({ gameType, slug, initial }: { gameType: "this_o
         </div>
       )}
 
-      {game.tagline && game.taglineIcon && <RoundTagline text={game.tagline} icon={game.taglineIcon} />}
+      {/* This or That's own tagline ("Music hits different together")
+          names music specifically, so it only makes sense when this
+          particular question actually is music -- Guess Mine's own
+          tagline is generic ("Different choices. Same good company.")
+          and applies to any category, so it isn't gated here. */}
+      {game.tagline &&
+        game.taglineIcon &&
+        (gameType !== "this_or_that" || (question.kind && isMusicKind(question.kind))) && (
+          <RoundTagline text={game.tagline} icon={game.taglineIcon} />
+        )}
     </div>
   );
 }

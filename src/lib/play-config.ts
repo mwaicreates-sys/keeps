@@ -57,7 +57,12 @@ export const PLAY_GAMES: PlayGameConfig[] = [
     type: "match_predictions",
     slug: "match-predictions",
     label: "Match Predictions",
-    subtitle: "Call the score before kickoff.",
+    // Honest, not a placeholder: there's no live football provider yet
+    // (that's future work, explicitly out of scope here), so fixtures
+    // are entered manually rather than pulled from real match data --
+    // say so on the card instead of presenting it as equivalent to the
+    // fully provider-backed games.
+    subtitle: "Call the score before kickoff. Manual fixtures for now.",
     icon: Trophy,
     bg: "#e5eef6",
     iconBg: "#cfe1f2",

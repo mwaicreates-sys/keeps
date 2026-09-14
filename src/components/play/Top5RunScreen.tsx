@@ -9,16 +9,27 @@ import { playGame } from "@/lib/play-config";
 import { RoundHeader } from "@/components/play/RoundHeader";
 import { RoundTagline } from "@/components/play/RoundTagline";
 import { RunWaitingForPartner } from "@/components/play/RunWaitingForPartner";
+import { RunUnavailable } from "@/components/play/RunUnavailable";
 import { getErrorMessage } from "@/lib/utils";
 import type { RunResult } from "@/lib/game-run-result";
 import type { RunStartResponse } from "@/services/game-runs-client";
 
 const game = playGame("top5");
 
+type NonNullRunStartResponse = RunStartResponse & { run: NonNullable<RunStartResponse["run"]> };
+
 /** Today's Top 5 run -- a single free-text list submission (already
  * one action per round before this change; the daily-run model just
- * makes it the whole day's run instead of up to 5 per day). */
+ * makes it the whole day's run instead of up to 5 per day). Top 5 has
+ * no provider dependency (a plain hardcoded topic), so `initial.run`
+ * is never actually null here -- guarded anyway for type safety and
+ * consistency with the other three run screens. */
 export function Top5RunScreen({ initial }: { initial: RunStartResponse }) {
+  if (!initial.run) return <RunUnavailable icon={game.icon} bg={game.bg} iconColor={game.iconColor} label={game.label} />;
+  return <Top5RunScreenInner initial={initial as NonNullRunStartResponse} />;
+}
+
+function Top5RunScreenInner({ initial }: { initial: NonNullRunStartResponse }) {
   const { userId, space } = useSession();
   const { show } = useToast();
   const prompt = (initial.run.questions as unknown as { topic: string; category: string }[])[0];

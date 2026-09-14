@@ -106,7 +106,14 @@ export async function POST(req: NextRequest) {
     } else {
       // No valid single replacement -- regenerate the whole pair
       // instead of leaving (or forcing) an invalid matchup.
-      nextQuestion = await generateChoiceQuestion(run.game_type, run.space_id, usedIdsElsewhere);
+      const regeneratedQuestion = await generateChoiceQuestion(run.game_type, run.space_id, usedIdsElsewhere);
+      if (!regeneratedQuestion) {
+        // No visual kind could produce a replacement pair at all right
+        // now -- refuse the swap rather than ever writing a text-only
+        // question into the run.
+        return NextResponse.json({ error: "no_replacement_available" }, { status: 200 });
+      }
+      nextQuestion = regeneratedQuestion;
       regenerated = true;
     }
 

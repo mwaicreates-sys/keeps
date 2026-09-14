@@ -62,6 +62,24 @@ function randomPopularPage(): number {
   return 1 + Math.floor(Math.random() * 5);
 }
 
+/** How many distinct discover pages to fetch for a given requested
+ * count -- one page (20 raw results) comfortably covers a small ask
+ * (e.g. Blind Rank/Keep 3 Drop 2's 8), but the daily-run choice
+ * generator asks for a much bigger prepared pool (20-30) so it can
+ * build several questions from one domain; a single page rarely
+ * clears that bar once familiarity ranking and the (rare) missing-
+ * poster case are applied. Capped at 2 -- bounded, not "fetch pages
+ * until satisfied." */
+function pagesNeededFor(count: number): number {
+  return count > 15 ? 2 : 1;
+}
+
+function distinctRandomPages(n: number): number[] {
+  const pages = new Set<number>();
+  while (pages.size < n) pages.add(randomPopularPage());
+  return [...pages];
+}
+
 type TmdbMovie = { id: number; title: string; poster_path: string | null; release_date?: string; vote_count: number; vote_average: number };
 type TmdbTv = { id: number; name: string; poster_path: string | null; first_air_date?: string; vote_count: number; vote_average: number };
 type TmdbPerson = { id: number; name: string; profile_path: string | null; known_for_department?: string; popularity: number };
@@ -114,19 +132,32 @@ async function resolveVisual(
 
 export async function getMoviePlayItems(count: number, exclude: Set<string> = new Set(), profile: FamiliarityProfile = NO_PROFILE): Promise<MovieFetchResult> {
   try {
-    const page = randomPopularPage();
-    const data = await tmdbGet<{ results?: TmdbMovie[] }>(
-      `/discover/movie?sort_by=popularity.desc&vote_count.gte=${MIN_VOTE_COUNT}&vote_average.gte=${MIN_VOTE_AVERAGE}&include_adult=false&page=${page}`,
-      60 * 60 * 6
+    const pages = distinctRandomPages(pagesNeededFor(count));
+    const responses = await Promise.all(
+      pages.map((page) =>
+        tmdbGet<{ results?: TmdbMovie[] }>(
+          `/discover/movie?sort_by=popularity.desc&vote_count.gte=${MIN_VOTE_COUNT}&vote_average.gte=${MIN_VOTE_AVERAGE}&include_adult=false&page=${page}`,
+          60 * 60 * 6
+        )
+      )
     );
-    const rawCount = data.results?.length ?? 0;
+    const seen = new Set<number>();
+    const allResults: TmdbMovie[] = [];
+    for (const data of responses) {
+      for (const m of data.results ?? []) {
+        if (seen.has(m.id)) continue; // dedupe across pages
+        seen.add(m.id);
+        allResults.push(m);
+      }
+    }
+    const rawCount = allResults.length;
     // The recognizability floor (MIN_VOTE_COUNT/MIN_VOTE_AVERAGE) is a
     // TMDb *query* param, not a post-hoc filter -- every raw result here
     // already cleared it, so "rejected for recognizability" is 0 by
     // construction for this endpoint; the floor itself is what's doing
     // that rejection before this code ever sees a response.
-    const candidates = (data.results ?? []).filter((m) => m.poster_path && !exclude.has(String(m.id)));
-    const rejectedForNoImageAtSource = rawCount - (data.results ?? []).filter((m) => m.poster_path).length;
+    const candidates = allResults.filter((m) => m.poster_path && !exclude.has(String(m.id)));
+    const rejectedForNoImageAtSource = rawCount - allResults.filter((m) => m.poster_path).length;
     // Overfetch beyond `count` before resolving/caching -- some
     // candidates will turn out to have no cached-usable image (rare,
     // since we already filtered on poster_path, but the cache can carry
@@ -157,14 +188,27 @@ export async function getMoviePlayItems(count: number, exclude: Set<string> = ne
 
 export async function getTvPlayItems(count: number, exclude: Set<string> = new Set(), profile: FamiliarityProfile = NO_PROFILE): Promise<MovieFetchResult> {
   try {
-    const page = randomPopularPage();
-    const data = await tmdbGet<{ results?: TmdbTv[] }>(
-      `/discover/tv?sort_by=popularity.desc&vote_count.gte=${MIN_VOTE_COUNT}&vote_average.gte=${MIN_VOTE_AVERAGE}&include_adult=false&page=${page}`,
-      60 * 60 * 6
+    const pages = distinctRandomPages(pagesNeededFor(count));
+    const responses = await Promise.all(
+      pages.map((page) =>
+        tmdbGet<{ results?: TmdbTv[] }>(
+          `/discover/tv?sort_by=popularity.desc&vote_count.gte=${MIN_VOTE_COUNT}&vote_average.gte=${MIN_VOTE_AVERAGE}&include_adult=false&page=${page}`,
+          60 * 60 * 6
+        )
+      )
     );
-    const rawCount = data.results?.length ?? 0;
-    const candidates = (data.results ?? []).filter((t) => t.poster_path && !exclude.has(String(t.id)));
-    const rejectedForNoImageAtSource = rawCount - (data.results ?? []).filter((t) => t.poster_path).length;
+    const seen = new Set<number>();
+    const allResults: TmdbTv[] = [];
+    for (const data of responses) {
+      for (const t of data.results ?? []) {
+        if (seen.has(t.id)) continue;
+        seen.add(t.id);
+        allResults.push(t);
+      }
+    }
+    const rawCount = allResults.length;
+    const candidates = allResults.filter((t) => t.poster_path && !exclude.has(String(t.id)));
+    const rejectedForNoImageAtSource = rawCount - allResults.filter((t) => t.poster_path).length;
     const ranked = rankByFamiliarity(
       candidates.map((t) => ({ id: String(t.id), title: t.name, subtitle: t.first_air_date?.slice(0, 4) ?? null })),
       profile,
@@ -191,15 +235,28 @@ export async function getTvPlayItems(count: number, exclude: Set<string> = new S
 
 export async function getPersonPlayItems(count: number, exclude: Set<string> = new Set(), profile: FamiliarityProfile = NO_PROFILE): Promise<MovieFetchResult> {
   try {
-    const page = 1 + Math.floor(Math.random() * 3); // /person/popular is a much smaller, curated-feeling list -- fewer pages needed
-    const data = await tmdbGet<{ results?: TmdbPerson[] }>(`/person/popular?page=${page}`, 60 * 60 * 6);
-    const rawCount = data.results?.length ?? 0;
-    const withImageField = (data.results ?? []).filter((p) => p.profile_path);
+    // /person/popular is a much smaller, curated-feeling list than
+    // discover -- still fetch a second page for a big pool request,
+    // since a meaningful slice of each page lacks a usable profile
+    // photo or isn't an actor.
+    const pageCount = pagesNeededFor(count);
+    const pages = new Set<number>();
+    while (pages.size < pageCount) pages.add(1 + Math.floor(Math.random() * 3));
+    const responses = await Promise.all([...pages].map((page) => tmdbGet<{ results?: TmdbPerson[] }>(`/person/popular?page=${page}`, 60 * 60 * 6)));
+    const seen = new Set<number>();
+    const allResults: TmdbPerson[] = [];
+    for (const data of responses) {
+      for (const p of data.results ?? []) {
+        if (seen.has(p.id)) continue;
+        seen.add(p.id);
+        allResults.push(p);
+      }
+    }
+    const rawCount = allResults.length;
+    const withImageField = allResults.filter((p) => p.profile_path);
     const rejectedForRecognizability = withImageField.filter((p) => p.known_for_department !== "Acting").length;
     const rejectedForNoImageAtSource = rawCount - withImageField.length;
-    const candidates = (data.results ?? []).filter(
-      (p) => p.profile_path && p.known_for_department === "Acting" && !exclude.has(String(p.id))
-    );
+    const candidates = allResults.filter((p) => p.profile_path && p.known_for_department === "Acting" && !exclude.has(String(p.id)));
     const ranked = rankByFamiliarity(
       candidates.map((p) => ({ id: String(p.id), title: p.name, subtitle: null })),
       profile,
